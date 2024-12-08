@@ -18,50 +18,39 @@ class Strategy:
         trades = []
         self.current_capital = self.initial_capital
         
-        # Calcular médias móveis e indicadores adicionais
+        # Calcular médias móveis
         self.df['SMA_20'] = self.df['Close'].rolling(window=20).mean()
-        self.df['SMA_50'] = self.df['Close'].rolling(window=50).mean()
         self.df['ATR'] = self.calculate_atr(14)
-        self.df['Volatility'] = self.df['ATR'] / self.df['Close'] * 100
         
-        for i in range(50, len(self.df)):  # Começar após ter dados suficientes para as médias
+        for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
             current_date = self.df.index[i]
             
-            # Condições de entrada refinadas
+            # Condições de entrada mais flexíveis
             stoch_condition = (
-                (self.df['STOCH_K'].iloc[i] > 20) and  # Não muito sobrevendido
-                (self.df['STOCH_K'].iloc[i] < 80) and  # Não muito sobrecomprado
-                (self.df['STOCH_K'].iloc[i] > self.df['STOCH_K'].iloc[i-1]) and
-                (self.df['STOCH_K'].iloc[i] > self.df['STOCH_D'].iloc[i])  # Cruzamento positivo
+                (self.df['STOCH_K'].iloc[i] > 30) and  # Reduzido de 50 para 30
+                (self.df['STOCH_K'].iloc[i] > self.df['STOCH_K'].iloc[i-1])
             )
             
             rsi_condition = (
-                (self.df['RSI'].iloc[i] > 40) and  # Não muito sobrevendido
-                (self.df['RSI'].iloc[i] < 70) and  # Não muito sobrecomprado
+                (self.df['RSI'].iloc[i] > 40) and  # Reduzido de 50 para 40
                 (self.df['RSI'].iloc[i] > self.df['RSI'].iloc[i-1])
             )
             
             macd_condition = (
-                (self.df['MACD'].iloc[i] > self.df['MACD_SIGNAL'].iloc[i]) and
-                (self.df['MACD'].iloc[i] > self.df['MACD'].iloc[i-1]) and
-                (self.df['MACD'].iloc[i] > 0)  # MACD positivo
+                (self.df['MACD'].iloc[i] > self.df['MACD_SIGNAL'].iloc[i]) or
+                (self.df['MACD'].iloc[i] > self.df['MACD'].iloc[i-1])
             )
             
-            # Filtros de tendência
+            # Filtro de tendência mais simples
             trend_condition = (
-                (self.df['Close'].iloc[i] > self.df['SMA_20'].iloc[i]) and  # Acima da média de 20
-                (self.df['SMA_20'].iloc[i] > self.df['SMA_20'].iloc[i-1]) and  # Média de 20 subindo
-                (self.df['SMA_20'].iloc[i] > self.df['SMA_50'].iloc[i])  # Média de 20 acima da de 50
+                self.df['Close'].iloc[i] > self.df['SMA_20'].iloc[i]
             )
             
-            # Filtro de volatilidade
-            volatility_condition = self.df['Volatility'].iloc[i] < 3.0  # Volatilidade menor que 3%
-            
-            # Stop loss dinâmico baseado no ATR
-            atr_multiplier = 2.5  # Aumentado para dar mais espaço
+            # Stop loss e take profit baseados no ATR
+            atr_multiplier = 2.0  # Reduzido de 2.5 para 2.0
             stop_loss = current_price - (self.df['ATR'].iloc[i] * atr_multiplier)
-            take_profit = current_price + (self.df['ATR'].iloc[i] * atr_multiplier * 2.0)  # Aumentado para 2.0x
+            take_profit = current_price + (self.df['ATR'].iloc[i] * atr_multiplier * 1.5)  # Reduzido de 2.0 para 1.5
             
             # Verificar condições de saída se houver posição
             if position > 0:
@@ -70,17 +59,15 @@ class Strategy:
                     entry_price = last_buy['price']
                     current_stop = max(
                         stop_loss,
-                        entry_price * 0.98,  # Stop fixo de 2%
-                        last_buy['stop_loss']  # Manter stop anterior se maior
+                        entry_price * 0.985  # Stop fixo mais agressivo (1.5%)
                     )
                     
-                    # Condições de saída refinadas
+                    # Condições de saída mais flexíveis
                     stop_hit = current_price <= current_stop
                     target_hit = current_price >= take_profit
                     trend_reversal = (
-                        not trend_condition or
-                        self.df['Close'].iloc[i] < self.df['SMA_20'].iloc[i] or
-                        (self.df['MACD'].iloc[i] < 0 and self.df['MACD'].iloc[i] < self.df['MACD_SIGNAL'].iloc[i])
+                        self.df['Close'].iloc[i] < self.df['SMA_20'].iloc[i] and
+                        self.df['MACD'].iloc[i] < self.df['MACD_SIGNAL'].iloc[i]
                     )
                     
                     if stop_hit or target_hit or trend_reversal:
@@ -107,16 +94,10 @@ class Strategy:
                         
                         position = 0
             
-            # Verificar sinal de compra com condições melhoradas
-            elif all([
-                stoch_condition,
-                rsi_condition,
-                macd_condition,
-                trend_condition,
-                volatility_condition
-            ]) and position == 0:
-                # Gerenciamento de risco: máximo de 1.5% do capital por operação
-                risk_per_trade = self.current_capital * 0.015
+            # Verificar sinal de compra com condições mais flexíveis
+            elif (stoch_condition and rsi_condition) or (macd_condition and trend_condition):
+                # Gerenciamento de risco: máximo de 2% do capital por operação
+                risk_per_trade = self.current_capital * 0.02  # Aumentado de 1.5% para 2%
                 position_size = risk_per_trade / (current_price - stop_loss)
                 shares = int(min(position_size, self.current_capital * 0.95 / current_price))
                 
@@ -172,10 +153,7 @@ class Strategy:
                 'win_rate': 0.0,
                 'total_return': 0.0,
                 'annual_return': 0.0,
-                'max_drawdown': 0.0,
-                'avg_profit_per_trade': 0.0,
-                'avg_loss_per_trade': 0.0,
-                'profit_factor': 0.0
+                'max_drawdown': 0.0
             }
         
         # Filtrar trades de venda para análise de resultados
@@ -184,7 +162,6 @@ class Strategy:
         # Métricas básicas
         total_trades = len(sell_trades)
         profitable_trades = len(sell_trades[sell_trades['profit'] > 0])
-        losing_trades = len(sell_trades[sell_trades['profit'] <= 0])
         
         # Cálculo do retorno total
         final_capital = float(self.positions['capital'].iloc[-1])
@@ -206,13 +183,6 @@ class Strategy:
         drawdowns = (portfolio_values - rolling_max) / rolling_max * 100
         max_drawdown = abs(drawdowns.min())
         
-        # Métricas adicionais
-        avg_profit = sell_trades[sell_trades['profit'] > 0]['profit'].mean() if profitable_trades > 0 else 0
-        avg_loss = abs(sell_trades[sell_trades['profit'] <= 0]['profit'].mean()) if losing_trades > 0 else 0
-        total_profit = sell_trades[sell_trades['profit'] > 0]['profit'].sum()
-        total_loss = abs(sell_trades[sell_trades['profit'] <= 0]['profit'].sum())
-        profit_factor = total_profit / total_loss if total_loss != 0 else float('inf')
-        
         # Taxa de acerto
         win_rate = (profitable_trades / total_trades * 100) if total_trades > 0 else 0.0
         
@@ -222,8 +192,5 @@ class Strategy:
             'win_rate': win_rate,
             'total_return': total_return,
             'annual_return': annual_return,
-            'max_drawdown': max_drawdown,
-            'avg_profit_per_trade': avg_profit,
-            'avg_loss_per_trade': avg_loss,
-            'profit_factor': profit_factor
+            'max_drawdown': max_drawdown
         }
