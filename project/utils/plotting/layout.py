@@ -11,11 +11,14 @@ def update_layout(fig):
             bgcolor='rgba(0,0,0,0.5)',
             bordercolor='gray',
             borderwidth=1,
-            y=1.0,
-            x=1.0,
-            xanchor='right'
+            orientation="h",  # Orientação horizontal
+            yanchor="bottom",
+            y=1.02,  # Posiciona acima do gráfico
+            xanchor="center",
+            x=0.5,  # Centralizado
+            font=dict(size=10)
         ),
-        margin=dict(t=30, l=60, r=60, b=30)
+        margin=dict(t=50, l=60, r=60, b=30)  # Aumentado margin top para acomodar a legenda
     )
     
     # Configurar eixos Y com domínios ajustados para melhor espaçamento
