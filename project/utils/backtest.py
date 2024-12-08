@@ -18,60 +18,52 @@ class Strategy:
         trades = []
         self.current_capital = self.initial_capital
         
-        # Calcular médias móveis
-        self.df['SMA_20'] = self.df['Close'].rolling(window=20).mean()
-        self.df['ATR'] = self.calculate_atr(14)
+        # Calcular média móvel para stop loss
+        self.df['SMA_7'] = self.df['Close'].rolling(window=7).mean()
         
         for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
             current_date = self.df.index[i]
             
-            # Condições de entrada mais flexíveis
+            # Condições originais da estratégia
             stoch_condition = (
-                (self.df['STOCH_K'].iloc[i] > 30) and  # Reduzido de 50 para 30
+                (self.df['STOCH_K'].iloc[i] > 50) and 
                 (self.df['STOCH_K'].iloc[i] > self.df['STOCH_K'].iloc[i-1])
             )
             
             rsi_condition = (
-                (self.df['RSI'].iloc[i] > 40) and  # Reduzido de 50 para 40
+                (self.df['RSI'].iloc[i] > 50) and 
                 (self.df['RSI'].iloc[i] > self.df['RSI'].iloc[i-1])
             )
             
             macd_condition = (
-                (self.df['MACD'].iloc[i] > self.df['MACD_SIGNAL'].iloc[i]) or
+                (self.df['MACD'].iloc[i] > self.df['MACD_SIGNAL'].iloc[i]) and 
                 (self.df['MACD'].iloc[i] > self.df['MACD'].iloc[i-1])
             )
             
-            # Filtro de tendência mais simples
-            trend_condition = (
-                self.df['Close'].iloc[i] > self.df['SMA_20'].iloc[i]
-            )
-            
-            # Stop loss e take profit baseados no ATR
-            atr_multiplier = 2.0  # Reduzido de 2.5 para 2.0
-            stop_loss = current_price - (self.df['ATR'].iloc[i] * atr_multiplier)
-            take_profit = current_price + (self.df['ATR'].iloc[i] * atr_multiplier * 1.5)  # Reduzido de 2.0 para 1.5
+            # Stop loss e take profit baseados na média móvel
+            stop_loss = self.df['SMA_7'].iloc[i] * 0.985  # 1.5% abaixo da média móvel
+            take_profit = current_price * 1.03  # 3% acima do preço de entrada
             
             # Verificar condições de saída se houver posição
             if position > 0:
                 last_buy = next((t for t in reversed(trades) if t['type'] == 'buy'), None)
                 if last_buy:
                     entry_price = last_buy['price']
-                    current_stop = max(
-                        stop_loss,
-                        entry_price * 0.985  # Stop fixo mais agressivo (1.5%)
-                    )
                     
-                    # Condições de saída mais flexíveis
-                    stop_hit = current_price <= current_stop
+                    # Condições de saída
+                    stop_hit = current_price <= stop_loss
                     target_hit = current_price >= take_profit
-                    trend_reversal = (
-                        self.df['Close'].iloc[i] < self.df['SMA_20'].iloc[i] and
-                        self.df['MACD'].iloc[i] < self.df['MACD_SIGNAL'].iloc[i]
+                    
+                    # Saída por reversão dos indicadores
+                    reverse_conditions = (
+                        not stoch_condition and 
+                        not rsi_condition and 
+                        not macd_condition
                     )
                     
-                    if stop_hit or target_hit or trend_reversal:
-                        revenue = position * current_price * 0.998
+                    if stop_hit or target_hit or reverse_conditions:
+                        revenue = position * current_price * 0.998  # Considerando custos
                         cost = last_buy['cost']
                         profit = revenue - cost
                         profit_pct = (profit / cost) * 100
@@ -88,21 +80,21 @@ class Strategy:
                             'capital': self.current_capital,
                             'revenue': revenue,
                             'profit': profit,
-                            'profit_pct': profit_pct,
-                            'exit_reason': 'stop_loss' if stop_hit else 'take_profit' if target_hit else 'trend_reversal'
+                            'profit_pct': profit_pct
                         })
                         
                         position = 0
             
-            # Verificar sinal de compra com condições mais flexíveis
-            elif (stoch_condition and rsi_condition) or (macd_condition and trend_condition):
-                # Gerenciamento de risco: máximo de 2% do capital por operação
-                risk_per_trade = self.current_capital * 0.02  # Aumentado de 1.5% para 2%
-                position_size = risk_per_trade / (current_price - stop_loss)
+            # Verificar sinal de compra
+            elif stoch_condition and rsi_condition and macd_condition:
+                # Gerenciamento de risco: máximo de 1% do capital por operação
+                risk_amount = self.current_capital * 0.01
+                risk_per_share = current_price - stop_loss
+                position_size = risk_amount / risk_per_share
                 shares = int(min(position_size, self.current_capital * 0.95 / current_price))
                 
                 if shares > 0:
-                    cost = shares * current_price * 1.002
+                    cost = shares * current_price * 1.002  # Considerando custos
                     if cost <= self.current_capital:
                         position = shares
                         self.current_capital -= cost
@@ -116,9 +108,7 @@ class Strategy:
                             'capital': self.current_capital,
                             'revenue': None,
                             'profit': None,
-                            'profit_pct': None,
-                            'stop_loss': stop_loss,
-                            'take_profit': take_profit
+                            'profit_pct': None
                         })
             
             # Atualizar posições
@@ -128,21 +118,6 @@ class Strategy:
             }
         
         return pd.DataFrame(trades)
-    
-    def calculate_atr(self, period):
-        """Calcula o Average True Range (ATR)."""
-        high = self.df['High']
-        low = self.df['Low']
-        close = self.df['Close']
-        
-        tr1 = high - low
-        tr2 = abs(high - close.shift())
-        tr3 = abs(low - close.shift())
-        
-        tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-        atr = tr.rolling(window=period).mean()
-        
-        return atr
     
     def get_metrics(self, trades_df):
         """Calcula as métricas do backtest."""
