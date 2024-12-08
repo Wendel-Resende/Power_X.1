@@ -18,13 +18,14 @@ class Strategy:
         trades = []
         self.current_capital = self.initial_capital
         
-        # Calcular média móvel para stop loss
-        self.df['SMA_7'] = self.df['Close'].rolling(window=7).mean()
+        # Calcular média móvel diária
+        self.df['SMA_DAILY'] = self.df['Close'].rolling(window=7).mean()
         
         for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
             current_date = self.df.index[i]
             current_color = self.df['signal_color'].iloc[i]
+            current_sma = self.df['SMA_DAILY'].iloc[i]
             
             # Verificar condições de saída se houver posição
             if position > 0:
@@ -33,10 +34,10 @@ class Strategy:
                     entry_price = last_buy['price']
                     
                     # Condições de saída:
-                    # 1. Stop loss baseado na média móvel
-                    stop_loss = self.df['SMA_7'].iloc[i] * 0.985
-                    # 2. Take profit 3% acima do preço de entrada
-                    take_profit = entry_price * 1.03
+                    # 1. Stop loss = média móvel diária * 1.5
+                    stop_loss = current_sma * 1.5
+                    # 2. Take profit = média móvel diária * 3
+                    take_profit = current_sma * 3
                     # 3. Candle preto (sinal misto)
                     exit_signal = current_color == 'black'
                     
@@ -67,7 +68,7 @@ class Strategy:
             elif current_color == 'green':
                 # Gerenciamento de risco: máximo de 1% do capital por operação
                 risk_amount = self.current_capital * 0.01
-                stop_loss = self.df['SMA_7'].iloc[i] * 0.985
+                stop_loss = current_sma * 1.5
                 risk_per_share = current_price - stop_loss
                 position_size = risk_amount / risk_per_share if risk_per_share > 0 else 0
                 shares = int(min(position_size, self.current_capital * 0.95 / current_price))
