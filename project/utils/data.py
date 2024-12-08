@@ -1,14 +1,14 @@
-import MetaTrader5 as mt5
+import yfinance as yf
 import pandas as pd
 from typing import Dict, Optional
 from datetime import datetime, timedelta
 
 class StockDataManager:
-    """Gerenciador de dados usando MetaTrader 5."""
+    """Gerenciador de dados usando yfinance."""
     
     def __init__(self):
         """Inicializa o gerenciador com configurações padrão."""
-        self._default_symbol = 'BBDC4'  # Sem .SA pois usamos símbolos do MT5
+        self._default_symbol = 'BBDC4.SA'
         self._valid_periods = {
             "1mo": "1 mês",
             "3mo": "3 meses", 
@@ -18,20 +18,12 @@ class StockDataManager:
             "5y": "5 anos"
         }
         self._valid_intervals = {
-            "1d": mt5.TIMEFRAME_D1,
-            "1h": mt5.TIMEFRAME_H1,
-            "15min": mt5.TIMEFRAME_M15,
-            "5min": mt5.TIMEFRAME_M5,
-            "1min": mt5.TIMEFRAME_M1
+            "1d": "1d",
+            "1h": "1h",
+            "15m": "15m",
+            "5m": "5m",
+            "1m": "1m"
         }
-        
-        # Inicializar conexão com MT5
-        if not mt5.initialize():
-            raise Exception("Falha ao inicializar MetaTrader 5")
-    
-    def __del__(self):
-        """Finaliza a conexão com MT5 ao destruir o objeto."""
-        mt5.shutdown()
     
     @property
     def default_symbol(self) -> str:
@@ -44,30 +36,18 @@ class StockDataManager:
         return self._valid_periods
     
     @property
-    def valid_intervals(self) -> Dict[str, int]:
+    def valid_intervals(self) -> Dict[str, str]:
         """Retorna os intervalos válidos."""
         return self._valid_intervals
     
-    def _convert_period_to_bars(self, period: str) -> int:
-        """Converte período em número de barras."""
-        period_days = {
-            "1mo": 30,
-            "3mo": 90,
-            "6mo": 180,
-            "1y": 365,
-            "2y": 730,
-            "5y": 1825
-        }
-        return period_days.get(period, 365)
-    
     def fetch_stock_data(self, symbol: str, period: str = '1y', interval: str = '1d') -> pd.DataFrame:
         """
-        Busca dados históricos do MT5.
+        Busca dados históricos usando yfinance.
         
         Args:
             symbol: Símbolo do ativo
             period: Período de dados ('1mo', '3mo', '6mo', '1y', '2y', '5y')
-            interval: Intervalo dos dados ('1d', '1h', '15min', '5min', '1min')
+            interval: Intervalo dos dados ('1d', '1h', '15m', '5m', '1m')
             
         Returns:
             DataFrame com os dados históricos
@@ -79,35 +59,12 @@ class StockDataManager:
             if interval not in self._valid_intervals:
                 raise ValueError(f"Intervalo inválido: {interval}")
             
-            # Calcular datas
-            utc_now = datetime.now()
-            days = self._convert_period_to_bars(period)
-            utc_from = utc_now - timedelta(days=days)
+            # Buscar dados do yfinance
+            ticker = yf.Ticker(symbol)
+            df = ticker.history(period=period, interval=interval)
             
-            # Buscar dados do MT5
-            rates = mt5.copy_rates_range(
-                symbol,
-                self._valid_intervals[interval],
-                utc_from,
-                utc_now
-            )
-            
-            if rates is None or len(rates) == 0:
+            if df.empty:
                 raise ValueError(f"Não há dados disponíveis para {symbol}")
-            
-            # Converter para DataFrame
-            df = pd.DataFrame(rates)
-            df['time'] = pd.to_datetime(df['time'], unit='s')
-            df.set_index('time', inplace=True)
-            
-            # Renomear colunas para manter compatibilidade
-            df.rename(columns={
-                'open': 'Open',
-                'high': 'High',
-                'low': 'Low',
-                'close': 'Close',
-                'tick_volume': 'Volume'
-            }, inplace=True)
             
             return df
         
@@ -125,18 +82,16 @@ class StockDataManager:
             Dicionário com informações do ativo
         """
         try:
-            symbol_info = mt5.symbol_info(symbol)
-            
-            if symbol_info is None:
-                raise ValueError(f"Símbolo não encontrado: {symbol}")
+            ticker = yf.Ticker(symbol)
+            info = ticker.info
             
             return {
-                'name': symbol_info.name,
-                'description': symbol_info.description,
-                'currency': symbol_info.currency_base,
-                'market_price': symbol_info.last,
-                'volume': symbol_info.volume,
-                'spread': symbol_info.spread
+                'name': symbol,
+                'description': info.get('longName', 'N/A'),
+                'currency': info.get('currency', 'BRL'),
+                'market_price': info.get('regularMarketPrice', 0.0),
+                'volume': info.get('regularMarketVolume', 0),
+                'sector': info.get('sector', 'N/A')
             }
         except Exception:
             return {
@@ -145,5 +100,5 @@ class StockDataManager:
                 'currency': 'BRL',
                 'market_price': 0.0,
                 'volume': 0,
-                'spread': 0
+                'sector': 'N/A'
             }
