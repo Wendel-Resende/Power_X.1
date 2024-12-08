@@ -16,12 +16,12 @@ def render_sidebar():
     # Seleção do ativo
     symbol = st.sidebar.text_input(
         "Símbolo do Ativo (ex: BBDC4.SA)",
-        value=st.session_state.data_manager.get_default_symbol()
+        value=st.session_state.data_manager.default_symbol
     )
     
     # Período e intervalo usando os valores válidos do StockDataManager
-    valid_periods = st.session_state.data_manager.get_valid_periods()
-    valid_intervals = st.session_state.data_manager.get_valid_intervals()
+    valid_periods = st.session_state.data_manager.valid_periods
+    valid_intervals = st.session_state.data_manager.valid_intervals
     
     period = st.sidebar.selectbox(
         "Período",

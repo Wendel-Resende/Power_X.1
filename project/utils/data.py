@@ -3,11 +3,14 @@ import pandas as pd
 from typing import Dict, Optional
 
 class StockDataManager:
+    """Gerenciador de dados de ações."""
+    
     def __init__(self):
+        """Inicializa o gerenciador com configurações padrão."""
         self._default_symbol = 'PETR4.SA'
         self._valid_periods = {
             "1mo": "1 mês",
-            "3mo": "3 meses",
+            "3mo": "3 meses", 
             "6mo": "6 meses",
             "1y": "1 ano",
             "2y": "2 anos",
@@ -19,20 +22,33 @@ class StockDataManager:
             "1mo": "Mensal"
         }
     
-    def get_default_symbol(self) -> str:
+    @property
+    def default_symbol(self) -> str:
         """Retorna o símbolo padrão."""
         return self._default_symbol
     
-    def get_valid_periods(self) -> Dict[str, str]:
+    @property
+    def valid_periods(self) -> Dict[str, str]:
         """Retorna os períodos válidos."""
         return self._valid_periods
     
-    def get_valid_intervals(self) -> Dict[str, str]:
+    @property
+    def valid_intervals(self) -> Dict[str, str]:
         """Retorna os intervalos válidos."""
         return self._valid_intervals
     
     def fetch_stock_data(self, symbol: str, period: str = '1y', interval: str = '1d') -> pd.DataFrame:
-        """Busca dados históricos de uma ação."""
+        """
+        Busca dados históricos de uma ação.
+        
+        Args:
+            symbol: Símbolo da ação
+            period: Período de dados ('1mo', '3mo', '6mo', '1y', '2y', '5y')
+            interval: Intervalo dos dados ('1d', '1wk', '1mo')
+            
+        Returns:
+            DataFrame com os dados históricos
+        """
         try:
             # Validar período e intervalo
             if period not in self._valid_periods:
@@ -61,7 +77,15 @@ class StockDataManager:
             raise Exception(f"Erro ao buscar dados para {symbol}: {str(e)}")
     
     def get_symbol_info(self, symbol: str) -> Dict:
-        """Retorna informações detalhadas sobre um símbolo específico."""
+        """
+        Retorna informações detalhadas sobre um símbolo específico.
+        
+        Args:
+            symbol: Símbolo da ação
+            
+        Returns:
+            Dicionário com informações da ação
+        """
         try:
             ticker = yf.Ticker(symbol)
             info = ticker.info
