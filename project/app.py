@@ -19,17 +19,22 @@ def render_sidebar():
         value=st.session_state.data_manager.get_default_symbol()
     )
     
-    # Período e intervalo
+    # Período e intervalo usando os valores válidos do StockDataManager
+    valid_periods = st.session_state.data_manager.get_valid_periods()
+    valid_intervals = st.session_state.data_manager.get_valid_intervals()
+    
     period = st.sidebar.selectbox(
         "Período",
-        options=["1mo", "3mo", "6mo", "1y", "2y", "5y"],
-        index=3
+        options=list(valid_periods.keys()),
+        format_func=lambda x: valid_periods[x],
+        index=3  # 1y por padrão
     )
     
     interval = st.sidebar.selectbox(
         "Intervalo",
-        options=["1d", "1wk", "1mo"],
-        index=0
+        options=list(valid_intervals.keys()),
+        format_func=lambda x: valid_intervals[x],
+        index=0  # 1d por padrão
     )
     
     # Configurações de Backtesting
