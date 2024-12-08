@@ -12,8 +12,8 @@ def create_dashboard_plot(df):
     fig = make_subplots(
         rows=4, cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.15,  # Aumentado para criar mais espaço entre os subplots
-        row_heights=[0.35, 0.20, 0.20, 0.25],  # Ajustado para melhor distribuição
+        vertical_spacing=0.12,  # Ajustado para melhor distribuição do espaço
+        row_heights=[0.45, 0.18, 0.18, 0.19],  # Aumentado o tamanho do gráfico principal
         subplot_titles=('Preço', 'Stochastic', 'RSI', 'MACD')
     )
     
