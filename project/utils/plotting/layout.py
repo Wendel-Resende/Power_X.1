@@ -1,7 +1,7 @@
 def update_layout(fig):
     """Update the figure layout and styling."""
     fig.update_layout(
-        height=1400,  # Aumentado para dar mais espaço vertical
+        height=1400,
         showlegend=True,
         template='plotly_dark',
         paper_bgcolor='rgba(0,0,0,0)',
@@ -14,13 +14,13 @@ def update_layout(fig):
         margin=dict(t=30, l=60, r=60, b=30)
     )
     
-    # Update Y axes com mais espaço
+    # Update Y axes com mais espaço entre os gráficos
     fig.update_yaxes(
         title_text="Preço", 
         row=1, col=1, 
         gridcolor='rgba(128,128,128,0.2)',
         title_standoff=20,
-        domain=[0.75, 1]  # Mais espaço para o gráfico principal
+        domain=[0.65, 1]  # Reduzido para criar mais espaço entre os gráficos
     )
     
     fig.update_yaxes(
@@ -32,7 +32,7 @@ def update_layout(fig):
         tick0=0, 
         dtick=20,
         title_standoff=20,
-        domain=[0.50, 0.70]  # Mais espaço para o Stochastic
+        domain=[0.45, 0.60]  # Ajustado para criar mais espaço acima
     )
     
     fig.update_yaxes(
@@ -44,7 +44,7 @@ def update_layout(fig):
         tick0=0, 
         dtick=20,
         title_standoff=20,
-        domain=[0.25, 0.45]  # Mais espaço para o RSI
+        domain=[0.25, 0.40]  # Ajustado para manter o espaçamento consistente
     )
     
     fig.update_yaxes(
@@ -52,7 +52,7 @@ def update_layout(fig):
         row=4, col=1, 
         gridcolor='rgba(128,128,128,0.2)',
         title_standoff=20,
-        domain=[0, 0.20]  # Mais espaço para o MACD
+        domain=[0.05, 0.20]  # Ajustado para manter o espaçamento consistente
     )
     
     # Update X axes
@@ -62,7 +62,7 @@ def update_layout(fig):
     for i in range(len(fig.layout.annotations)):
         fig.layout.annotations[i].update(
             font=dict(size=14, color='white'),
-            y=fig.layout.annotations[i].y + 0.03  # Ajustado para melhor posicionamento dos títulos
+            y=fig.layout.annotations[i].y + 0.03
         )
     
     return fig
