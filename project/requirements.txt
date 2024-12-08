@@ -3,4 +3,5 @@ pandas==2.2.0
 pandas-ta==0.3.14b0
 plotly==5.18.0
 backtesting==0.3.3
-MetaTrader5
+MetaTrader5==5.0.37
+python-dateutil==2.8.2
