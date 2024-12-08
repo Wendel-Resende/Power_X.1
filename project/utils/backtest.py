@@ -18,42 +18,73 @@ class Strategy:
         trades = []
         self.current_capital = self.initial_capital
         
-        # Calcular médias móveis para stop loss e take profit
-        self.df['SMA_7'] = self.df['Close'].rolling(window=7).mean()
-        self.df['ATR'] = self.calculate_atr(14)  # Adiciona ATR para stop loss dinâmico
+        # Calcular médias móveis e indicadores adicionais
+        self.df['SMA_20'] = self.df['Close'].rolling(window=20).mean()
+        self.df['SMA_50'] = self.df['Close'].rolling(window=50).mean()
+        self.df['ATR'] = self.calculate_atr(14)
+        self.df['Volatility'] = self.df['ATR'] / self.df['Close'] * 100
         
-        for i in range(1, len(self.df)):
+        for i in range(50, len(self.df)):  # Começar após ter dados suficientes para as médias
             current_price = float(self.df['Close'].iloc[i])
             current_date = self.df.index[i]
             
-            # Condições de entrada melhoradas
-            stoch_condition = (self.df['STOCH_K'].iloc[i] > 50) and (self.df['STOCH_K'].iloc[i] > self.df['STOCH_K'].iloc[i-1])
-            rsi_condition = (self.df['RSI'].iloc[i] > 50) and (self.df['RSI'].iloc[i] > self.df['RSI'].iloc[i-1])
-            macd_condition = (self.df['MACD'].iloc[i] > self.df['MACD_SIGNAL'].iloc[i]) and (self.df['MACD'].iloc[i] > self.df['MACD'].iloc[i-1])
+            # Condições de entrada refinadas
+            stoch_condition = (
+                (self.df['STOCH_K'].iloc[i] > 20) and  # Não muito sobrevendido
+                (self.df['STOCH_K'].iloc[i] < 80) and  # Não muito sobrecomprado
+                (self.df['STOCH_K'].iloc[i] > self.df['STOCH_K'].iloc[i-1]) and
+                (self.df['STOCH_K'].iloc[i] > self.df['STOCH_D'].iloc[i])  # Cruzamento positivo
+            )
             
-            # Filtro de tendência usando média móvel
-            trend_condition = current_price > self.df['SMA_7'].iloc[i]
+            rsi_condition = (
+                (self.df['RSI'].iloc[i] > 40) and  # Não muito sobrevendido
+                (self.df['RSI'].iloc[i] < 70) and  # Não muito sobrecomprado
+                (self.df['RSI'].iloc[i] > self.df['RSI'].iloc[i-1])
+            )
+            
+            macd_condition = (
+                (self.df['MACD'].iloc[i] > self.df['MACD_SIGNAL'].iloc[i]) and
+                (self.df['MACD'].iloc[i] > self.df['MACD'].iloc[i-1]) and
+                (self.df['MACD'].iloc[i] > 0)  # MACD positivo
+            )
+            
+            # Filtros de tendência
+            trend_condition = (
+                (self.df['Close'].iloc[i] > self.df['SMA_20'].iloc[i]) and  # Acima da média de 20
+                (self.df['SMA_20'].iloc[i] > self.df['SMA_20'].iloc[i-1]) and  # Média de 20 subindo
+                (self.df['SMA_20'].iloc[i] > self.df['SMA_50'].iloc[i])  # Média de 20 acima da de 50
+            )
+            
+            # Filtro de volatilidade
+            volatility_condition = self.df['Volatility'].iloc[i] < 3.0  # Volatilidade menor que 3%
             
             # Stop loss dinâmico baseado no ATR
-            atr_multiplier = 2.0
+            atr_multiplier = 2.5  # Aumentado para dar mais espaço
             stop_loss = current_price - (self.df['ATR'].iloc[i] * atr_multiplier)
-            take_profit = current_price + (self.df['ATR'].iloc[i] * atr_multiplier * 1.5)  # 1.5x o stop loss
+            take_profit = current_price + (self.df['ATR'].iloc[i] * atr_multiplier * 2.0)  # Aumentado para 2.0x
             
             # Verificar condições de saída se houver posição
             if position > 0:
                 last_buy = next((t for t in reversed(trades) if t['type'] == 'buy'), None)
                 if last_buy:
                     entry_price = last_buy['price']
-                    current_stop = min(stop_loss, last_buy['stop_loss'])  # Trailing stop
+                    current_stop = max(
+                        stop_loss,
+                        entry_price * 0.98,  # Stop fixo de 2%
+                        last_buy['stop_loss']  # Manter stop anterior se maior
+                    )
                     
-                    # Condições de saída melhoradas
+                    # Condições de saída refinadas
                     stop_hit = current_price <= current_stop
                     target_hit = current_price >= take_profit
-                    trend_reversal = not trend_condition and position > 0
+                    trend_reversal = (
+                        not trend_condition or
+                        self.df['Close'].iloc[i] < self.df['SMA_20'].iloc[i] or
+                        (self.df['MACD'].iloc[i] < 0 and self.df['MACD'].iloc[i] < self.df['MACD_SIGNAL'].iloc[i])
+                    )
                     
                     if stop_hit or target_hit or trend_reversal:
-                        # Calcular resultado da operação
-                        revenue = position * current_price * 0.998  # Considerando 0.2% de taxa
+                        revenue = position * current_price * 0.998
                         cost = last_buy['cost']
                         profit = revenue - cost
                         profit_pct = (profit / cost) * 100
@@ -77,14 +108,20 @@ class Strategy:
                         position = 0
             
             # Verificar sinal de compra com condições melhoradas
-            elif all([stoch_condition, rsi_condition, macd_condition, trend_condition]) and position == 0:
-                # Gerenciamento de risco: máximo de 2% do capital por operação
-                risk_per_trade = self.current_capital * 0.02
+            elif all([
+                stoch_condition,
+                rsi_condition,
+                macd_condition,
+                trend_condition,
+                volatility_condition
+            ]) and position == 0:
+                # Gerenciamento de risco: máximo de 1.5% do capital por operação
+                risk_per_trade = self.current_capital * 0.015
                 position_size = risk_per_trade / (current_price - stop_loss)
                 shares = int(min(position_size, self.current_capital * 0.95 / current_price))
                 
                 if shares > 0:
-                    cost = shares * current_price * 1.002  # Considerando 0.2% de taxa
+                    cost = shares * current_price * 1.002
                     if cost <= self.current_capital:
                         position = shares
                         self.current_capital -= cost
