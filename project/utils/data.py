@@ -7,7 +7,7 @@ class StockDataManager:
     
     def __init__(self):
         """Inicializa o gerenciador com configurações padrão."""
-        self._default_symbol = 'PETR4.SA'
+        self._default_symbol = 'BBDC4.SA'
         self._valid_periods = {
             "1mo": "1 mês",
             "3mo": "3 meses", 
