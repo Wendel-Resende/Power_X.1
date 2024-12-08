@@ -1,7 +1,7 @@
 def update_layout(fig):
     """Update the figure layout and styling."""
     fig.update_layout(
-        height=1200,  # Aumentado para 1200px para dar mais espaço vertical
+        height=1400,  # Aumentado para dar mais espaço vertical
         showlegend=True,
         template='plotly_dark',
         paper_bgcolor='rgba(0,0,0,0)',
@@ -20,7 +20,7 @@ def update_layout(fig):
         row=1, col=1, 
         gridcolor='rgba(128,128,128,0.2)',
         title_standoff=20,
-        domain=[0.6, 1]  # Ajustado para dar mais espaço ao gráfico principal
+        domain=[0.75, 1]  # Mais espaço para o gráfico principal
     )
     
     fig.update_yaxes(
@@ -32,7 +32,7 @@ def update_layout(fig):
         tick0=0, 
         dtick=20,
         title_standoff=20,
-        domain=[0.4, 0.58]  # Espaço para o Stochastic
+        domain=[0.50, 0.70]  # Mais espaço para o Stochastic
     )
     
     fig.update_yaxes(
@@ -44,7 +44,7 @@ def update_layout(fig):
         tick0=0, 
         dtick=20,
         title_standoff=20,
-        domain=[0.22, 0.38]  # Espaço para o RSI
+        domain=[0.25, 0.45]  # Mais espaço para o RSI
     )
     
     fig.update_yaxes(
@@ -52,7 +52,7 @@ def update_layout(fig):
         row=4, col=1, 
         gridcolor='rgba(128,128,128,0.2)',
         title_standoff=20,
-        domain=[0, 0.18]  # Espaço para o MACD
+        domain=[0, 0.20]  # Mais espaço para o MACD
     )
     
     # Update X axes
@@ -62,7 +62,7 @@ def update_layout(fig):
     for i in range(len(fig.layout.annotations)):
         fig.layout.annotations[i].update(
             font=dict(size=14, color='white'),
-            y=fig.layout.annotations[i].y + 0.07  # Aumentado para ajustar os títulos
+            y=fig.layout.annotations[i].y + 0.03  # Ajustado para melhor posicionamento dos títulos
         )
     
     return fig
