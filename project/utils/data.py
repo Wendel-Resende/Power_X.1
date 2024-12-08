@@ -33,13 +33,22 @@ def get_b3_symbols():
             except:
                 continue
     
-    return pd.DataFrame(symbols)
+    # Criar DataFrame e garantir que as colunas existam
+    df = pd.DataFrame(symbols)
+    required_columns = ['symbol', 'name', 'sector']
+    for col in required_columns:
+        if col not in df.columns:
+            df[col] = ''
+    
+    return df
 
 def fetch_stock_data(symbol, period='1y', interval='1d'):
     """Fetch stock data from Yahoo Finance."""
     try:
         stock = yf.Ticker(symbol)
         df = stock.history(period=period, interval=interval)
+        if df.empty:
+            raise Exception(f"No data available for {symbol}")
         return df
     except Exception as e:
         raise Exception(f"Error fetching data for {symbol}: {str(e)}")
