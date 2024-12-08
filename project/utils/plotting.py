@@ -10,19 +10,29 @@ def create_dashboard_plot(df):
                        subplot_titles=('Preço', 'Stochastic', 'RSI', 'MACD'))
 
     # Gráfico de Candlestick
-    fig.add_trace(
-        go.Candlestick(
-            x=df.index,
-            open=df['Open'],
-            high=df['High'],
-            low=df['Low'],
-            close=df['Close'],
-            name='OHLC',
-            increasing_line_color=df['signal_color'].map({'green': 'green', 'red': 'red', 'black': 'black'}),
-            decreasing_line_color=df['signal_color'].map({'green': 'green', 'red': 'red', 'black': 'black'})
-        ),
-        row=1, col=1
-    )
+    colors = {
+        'green': {'increasing': 'green', 'decreasing': 'green'},
+        'red': {'increasing': 'red', 'decreasing': 'red'},
+        'black': {'increasing': 'black', 'decreasing': 'black'}
+    }
+
+    for color in ['green', 'red', 'black']:
+        mask = df['signal_color'] == color
+        if mask.any():
+            fig.add_trace(
+                go.Candlestick(
+                    x=df[mask].index,
+                    open=df[mask]['Open'],
+                    high=df[mask]['High'],
+                    low=df[mask]['Low'],
+                    close=df[mask]['Close'],
+                    name=f'OHLC ({color})',
+                    increasing_line_color=colors[color]['increasing'],
+                    decreasing_line_color=colors[color]['decreasing'],
+                    showlegend=True
+                ),
+                row=1, col=1
+            )
 
     # Stochastic
     fig.add_trace(go.Scatter(x=df.index, y=df['STOCH_K'], name='Stoch %K', line=dict(color='blue')), row=2, col=1)
