@@ -9,12 +9,12 @@ from .layout import update_layout
 
 def create_dashboard_plot(df):
     """Create the main dashboard plot with candlesticks and indicators."""
-    # Criar subplots com maior espaçamento vertical e melhor distribuição de altura
+    # Criar subplots com maior espaçamento vertical
     fig = make_subplots(
         rows=4, cols=1,
         shared_xaxes=True,
-        vertical_spacing=0.15,  # Aumentado para maior separação entre gráficos
-        row_heights=[0.55, 0.15, 0.15, 0.15],  # Gráfico principal maior, indicadores menores
+        vertical_spacing=0.05,  # Reduzido para aproximar os gráficos
+        row_heights=[0.45, 0.18, 0.18, 0.19],  # Ajustado para melhor distribuição
         subplot_titles=('Preço', 'Stochastic', 'RSI', 'MACD')
     )
     
