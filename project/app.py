@@ -1,9 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils.data import StockDataManager
-from utils.indicators import calculate_indicators
-from utils.plotting import create_dashboard_plot
-from utils.backtest import Strategy
+from utils import StockDataManager, calculate_indicators, create_dashboard_plot, Strategy
 
 st.set_page_config(layout="wide", page_title="Dashboard Financeiro")
 
