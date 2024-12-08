@@ -1,13 +1,18 @@
 import streamlit as st
 import pandas as pd
-from utils import StockDataManager, calculate_indicators, create_dashboard_plot, Strategy
+from utils import MT5DataManager, calculate_indicators, create_dashboard_plot, Strategy
 
 st.set_page_config(layout="wide", page_title="Dashboard Financeiro")
 
 def initialize_session_state():
     """Inicializa o estado da sessão com valores padrão."""
     if 'data_manager' not in st.session_state:
-        st.session_state.data_manager = StockDataManager()
+        try:
+            st.session_state.data_manager = MT5DataManager()
+        except Exception as e:
+            st.error(f"Erro ao inicializar MT5: {str(e)}")
+            st.info("Certifique-se que o MetaTrader5 está instalado e em execução.")
+            st.stop()
 
 def render_sidebar():
     """Renderiza a barra lateral com as configurações."""
@@ -15,11 +20,11 @@ def render_sidebar():
     
     # Seleção do ativo
     symbol = st.sidebar.text_input(
-        "Símbolo do Ativo (ex: BBDC4.SA)",
+        "Símbolo do Ativo (ex: BBDC4)",
         value=st.session_state.data_manager.default_symbol
     )
     
-    # Período e intervalo usando os valores válidos do StockDataManager
+    # Período e intervalo usando os valores válidos do MT5DataManager
     valid_periods = st.session_state.data_manager.valid_periods
     valid_intervals = st.session_state.data_manager.valid_intervals
     
