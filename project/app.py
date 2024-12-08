@@ -8,26 +8,15 @@ def initialize_session_state():
     """Inicializa o estado da sessão com valores padrão."""
     if 'data_manager' not in st.session_state:
         st.session_state.data_manager = StockDataManager()
-    if 'symbols_df' not in st.session_state:
-        try:
-            st.session_state.symbols_df = st.session_state.data_manager.get_b3_symbols()
-        except Exception as e:
-            st.error(f"Erro ao carregar lista de ativos: {str(e)}")
-            st.session_state.symbols_df = pd.DataFrame({'symbol': ['PETR4.SA'], 'name': ['Petrobras PN']})
 
 def render_sidebar():
     """Renderiza a barra lateral com as configurações."""
     st.sidebar.header("Configurações")
     
     # Seleção do ativo
-    symbols_df = st.session_state.symbols_df
-    default_symbol = st.session_state.data_manager.get_default_symbol()
-    
-    symbol = st.sidebar.selectbox(
-        "Símbolo do Ativo",
-        options=symbols_df['symbol'].tolist(),
-        index=symbols_df['symbol'].tolist().index(default_symbol) if default_symbol in symbols_df['symbol'].tolist() else 0,
-        format_func=lambda x: f"{x} - {symbols_df[symbols_df['symbol'] == x]['name'].iloc[0]}"
+    symbol = st.sidebar.text_input(
+        "Símbolo do Ativo (ex: BBDC4.SA)",
+        value=st.session_state.data_manager.get_default_symbol()
     )
     
     # Período e intervalo
