@@ -24,26 +24,7 @@ class Strategy:
         for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
             current_date = self.df.index[i]
-            
-            # Condições originais da estratégia
-            stoch_condition = (
-                (self.df['STOCH_K'].iloc[i] > 50) and 
-                (self.df['STOCH_K'].iloc[i] > self.df['STOCH_K'].iloc[i-1])
-            )
-            
-            rsi_condition = (
-                (self.df['RSI'].iloc[i] > 50) and 
-                (self.df['RSI'].iloc[i] > self.df['RSI'].iloc[i-1])
-            )
-            
-            macd_condition = (
-                (self.df['MACD'].iloc[i] > self.df['MACD_SIGNAL'].iloc[i]) and 
-                (self.df['MACD'].iloc[i] > self.df['MACD'].iloc[i-1])
-            )
-            
-            # Stop loss e take profit baseados na média móvel
-            stop_loss = self.df['SMA_7'].iloc[i] * 0.985  # 1.5% abaixo da média móvel
-            take_profit = current_price * 1.03  # 3% acima do preço de entrada
+            current_color = self.df['signal_color'].iloc[i]
             
             # Verificar condições de saída se houver posição
             if position > 0:
@@ -51,18 +32,15 @@ class Strategy:
                 if last_buy:
                     entry_price = last_buy['price']
                     
-                    # Condições de saída
-                    stop_hit = current_price <= stop_loss
-                    target_hit = current_price >= take_profit
+                    # Condições de saída:
+                    # 1. Stop loss baseado na média móvel
+                    stop_loss = self.df['SMA_7'].iloc[i] * 0.985
+                    # 2. Take profit 3% acima do preço de entrada
+                    take_profit = entry_price * 1.03
+                    # 3. Candle preto (sinal misto)
+                    exit_signal = current_color == 'black'
                     
-                    # Saída por reversão dos indicadores
-                    reverse_conditions = (
-                        not stoch_condition and 
-                        not rsi_condition and 
-                        not macd_condition
-                    )
-                    
-                    if stop_hit or target_hit or reverse_conditions:
+                    if current_price <= stop_loss or current_price >= take_profit or exit_signal:
                         revenue = position * current_price * 0.998  # Considerando custos
                         cost = last_buy['cost']
                         profit = revenue - cost
@@ -85,12 +63,13 @@ class Strategy:
                         
                         position = 0
             
-            # Verificar sinal de compra
-            elif stoch_condition and rsi_condition and macd_condition:
+            # Verificar sinal de compra (apenas em candles verdes)
+            elif current_color == 'green':
                 # Gerenciamento de risco: máximo de 1% do capital por operação
                 risk_amount = self.current_capital * 0.01
+                stop_loss = self.df['SMA_7'].iloc[i] * 0.985
                 risk_per_share = current_price - stop_loss
-                position_size = risk_amount / risk_per_share
+                position_size = risk_amount / risk_per_share if risk_per_share > 0 else 0
                 shares = int(min(position_size, self.current_capital * 0.95 / current_price))
                 
                 if shares > 0:
