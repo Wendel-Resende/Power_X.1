@@ -18,7 +18,7 @@ class Strategy:
         trades = []
         self.current_capital = self.initial_capital
         
-        # Calcular média móvel diária
+        # Calcular média móvel diária para stop loss e take profit
         self.df['SMA_DAILY'] = self.df['Close'].rolling(window=7).mean()
         
         for i in range(1, len(self.df)):
@@ -33,15 +33,17 @@ class Strategy:
                 if last_buy:
                     entry_price = last_buy['price']
                     
-                    # Condições de saída:
-                    # 1. Stop loss = média móvel diária * 1.5
+                    # Stop loss = média móvel diária * 1.5
                     stop_loss = current_sma * 1.5
-                    # 2. Take profit = média móvel diária * 3
+                    # Take profit = média móvel diária * 3
                     take_profit = current_sma * 3
-                    # 3. Candle preto (sinal misto)
-                    exit_signal = current_color == 'black'
                     
-                    if current_price <= stop_loss or current_price >= take_profit or exit_signal:
+                    # Condições de saída
+                    stop_loss_hit = current_price <= stop_loss
+                    take_profit_hit = current_price >= take_profit
+                    black_candle = current_color == 'black'
+                    
+                    if stop_loss_hit or take_profit_hit or black_candle:
                         revenue = position * current_price * 0.998  # Considerando custos
                         cost = last_buy['cost']
                         profit = revenue - cost
@@ -65,13 +67,10 @@ class Strategy:
                         position = 0
             
             # Verificar sinal de compra (apenas em candles verdes)
-            elif current_color == 'green':
-                # Gerenciamento de risco: máximo de 1% do capital por operação
-                risk_amount = self.current_capital * 0.01
-                stop_loss = current_sma * 1.5
-                risk_per_share = current_price - stop_loss
-                position_size = risk_amount / risk_per_share if risk_per_share > 0 else 0
-                shares = int(min(position_size, self.current_capital * 0.95 / current_price))
+            elif current_color == 'green' and position == 0:
+                # Calcular tamanho da posição baseado no capital disponível
+                position_size = (self.current_capital * 0.95) / current_price  # Usa até 95% do capital
+                shares = int(position_size)
                 
                 if shares > 0:
                     cost = shares * current_price * 1.002  # Considerando custos
@@ -97,7 +96,10 @@ class Strategy:
                 'capital': self.current_capital + (position * current_price if position > 0 else 0)
             }
         
-        return pd.DataFrame(trades)
+        trades_df = pd.DataFrame(trades)
+        if not trades_df.empty:
+            trades_df['date'] = pd.to_datetime(trades_df['date'])
+        return trades_df
     
     def get_metrics(self, trades_df):
         """Calcula as métricas do backtest."""
