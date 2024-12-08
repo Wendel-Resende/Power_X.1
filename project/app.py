@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from utils.data import fetch_stock_data
+from utils.data import fetch_stock_data, get_b3_symbols
 from utils.indicators import calculate_indicators
 from utils.plotting import create_dashboard_plot
 from utils.backtest import Strategy
@@ -10,9 +10,23 @@ st.set_page_config(layout="wide", page_title="Dashboard Financeiro")
 def main():
     st.title("Dashboard Financeiro - Análise Técnica")
     
+    # Carregar lista de símbolos da B3
+    if 'b3_symbols' not in st.session_state:
+        with st.spinner('Carregando lista de ativos...'):
+            st.session_state.b3_symbols = get_b3_symbols()
+    
     # Sidebar para configurações
     st.sidebar.header("Configurações")
-    symbol = st.sidebar.text_input("Símbolo do Ativo", value="PETR4.SA")
+    
+    # Seleção do ativo com busca
+    symbols_df = st.session_state.b3_symbols
+    symbol = st.sidebar.selectbox(
+        "Símbolo do Ativo",
+        options=symbols_df['symbol'].tolist(),
+        format_func=lambda x: f"{x} - {symbols_df[symbols_df['symbol'] == x]['name'].iloc[0]}",
+        index=symbols_df[symbols_df['symbol'] == 'PETR4.SA'].index[0] if 'PETR4.SA' in symbols_df['symbol'].values else 0
+    )
+    
     period = st.sidebar.selectbox(
         "Período",
         options=["1mo", "3mo", "6mo", "1y", "2y", "5y"],
