@@ -1,43 +1,39 @@
 import streamlit as st
 import pandas as pd
-from utils.data import fetch_stock_data, get_b3_symbols
+from utils.data import StockDataManager
 from utils.indicators import calculate_indicators
 from utils.plotting import create_dashboard_plot
 from utils.backtest import Strategy
 
 st.set_page_config(layout="wide", page_title="Dashboard Financeiro")
 
-def main():
-    st.title("Dashboard Financeiro - Análise Técnica")
-    
-    # Carregar lista de símbolos da B3
-    if 'b3_symbols' not in st.session_state:
-        with st.spinner('Carregando lista de ativos...'):
-            try:
-                st.session_state.b3_symbols = get_b3_symbols()
-            except Exception as e:
-                st.error(f"Erro ao carregar lista de ativos: {str(e)}")
-                return
-    
-    # Sidebar para configurações
+def initialize_session_state():
+    """Inicializa o estado da sessão com valores padrão."""
+    if 'data_manager' not in st.session_state:
+        st.session_state.data_manager = StockDataManager()
+    if 'symbols_df' not in st.session_state:
+        try:
+            st.session_state.symbols_df = st.session_state.data_manager.get_b3_symbols()
+        except Exception as e:
+            st.error(f"Erro ao carregar lista de ativos: {str(e)}")
+            st.session_state.symbols_df = pd.DataFrame({'symbol': ['PETR4.SA'], 'name': ['Petrobras PN']})
+
+def render_sidebar():
+    """Renderiza a barra lateral com as configurações."""
     st.sidebar.header("Configurações")
     
-    # Seleção do ativo com busca
-    try:
-        symbols_df = st.session_state.b3_symbols
-        default_index = symbols_df.index[symbols_df['symbol'] == 'PETR4.SA'].tolist()
-        default_index = default_index[0] if default_index else 0
-        
-        symbol = st.sidebar.selectbox(
-            "Símbolo do Ativo",
-            options=symbols_df['symbol'].tolist(),
-            format_func=lambda x: f"{x} - {symbols_df[symbols_df['symbol'] == x]['name'].iloc[0]}",
-            index=default_index
-        )
-    except Exception as e:
-        st.error(f"Erro ao configurar seleção de ativos: {str(e)}")
-        return
+    # Seleção do ativo
+    symbols_df = st.session_state.symbols_df
+    default_symbol = st.session_state.data_manager.get_default_symbol()
     
+    symbol = st.sidebar.selectbox(
+        "Símbolo do Ativo",
+        options=symbols_df['symbol'].tolist(),
+        index=symbols_df['symbol'].tolist().index(default_symbol) if default_symbol in symbols_df['symbol'].tolist() else 0,
+        format_func=lambda x: f"{x} - {symbols_df[symbols_df['symbol'] == x]['name'].iloc[0]}"
+    )
+    
+    # Período e intervalo
     period = st.sidebar.selectbox(
         "Período",
         options=["1mo", "3mo", "6mo", "1y", "2y", "5y"],
@@ -61,11 +57,22 @@ def main():
     )
     
     run_backtest = st.sidebar.button("Executar Backtest")
+    
+    return symbol, period, interval, initial_capital, run_backtest
 
+def main():
+    st.title("Dashboard Financeiro - Análise Técnica")
+    
+    # Inicializar estado da sessão
+    initialize_session_state()
+    
+    # Renderizar sidebar e obter configurações
+    symbol, period, interval, initial_capital, run_backtest = render_sidebar()
+    
     try:
         # Carregar dados
         with st.spinner('Carregando dados do ativo...'):
-            df = fetch_stock_data(symbol, period, interval)
+            df = st.session_state.data_manager.fetch_stock_data(symbol, period, interval)
         
         if df.empty:
             st.warning("Não há dados disponíveis para o período selecionado.")
@@ -80,7 +87,8 @@ def main():
         df['MACD_PREV'] = df['MACD'].shift(1)
         
         # Determinar cores dos candles
-        df['signal_color'] = 'black'  # cor padrão
+        df['signal_color'] = df.apply(lambda row: 'black', axis=1)  # cor padrão
+        
         for i in range(1, len(df)):
             row = df.iloc[i]
             prev_row = df.iloc[i-1]
