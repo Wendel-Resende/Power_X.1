@@ -1,7 +1,8 @@
 def update_layout(fig):
     """Update the figure layout and styling."""
+    # Configuração básica do layout
     fig.update_layout(
-        height=1200,  # Ajustado para melhor proporção
+        height=1000,  # Altura total aumentada
         showlegend=True,
         template='plotly_dark',
         paper_bgcolor='rgba(0,0,0,0)',
@@ -10,20 +11,20 @@ def update_layout(fig):
             bgcolor='rgba(0,0,0,0.5)',
             bordercolor='gray',
             borderwidth=1,
-            y=1.0,  # Movido para o topo
+            y=1.0,
             x=1.0,
             xanchor='right'
         ),
-        margin=dict(t=50, l=60, r=60, b=30)  # Aumentado margem superior
+        margin=dict(t=30, l=60, r=60, b=30)
     )
     
-    # Update Y axes com mais espaço entre os gráficos
+    # Configurar eixos Y com domínios ajustados para melhor espaçamento
     fig.update_yaxes(
         title_text="Preço", 
         row=1, col=1, 
         gridcolor='rgba(128,128,128,0.2)',
         title_standoff=20,
-        domain=[0.70, 1.0]  # Aumentado espaço para o gráfico principal
+        domain=[0.75, 1.0]  # Gráfico principal ocupa mais espaço
     )
     
     fig.update_yaxes(
@@ -35,7 +36,7 @@ def update_layout(fig):
         tick0=0, 
         dtick=20,
         title_standoff=20,
-        domain=[0.48, 0.65]  # Ajustado para maior separação do gráfico principal
+        domain=[0.52, 0.70]  # Maior separação do gráfico principal
     )
     
     fig.update_yaxes(
@@ -47,7 +48,7 @@ def update_layout(fig):
         tick0=0, 
         dtick=20,
         title_standoff=20,
-        domain=[0.26, 0.43]  # Ajustado para manter espaçamento consistente
+        domain=[0.29, 0.47]  # Espaçamento consistente
     )
     
     fig.update_yaxes(
@@ -55,21 +56,21 @@ def update_layout(fig):
         row=4, col=1, 
         gridcolor='rgba(128,128,128,0.2)',
         title_standoff=20,
-        domain=[0.04, 0.21]  # Ajustado para manter espaçamento consistente
+        domain=[0.06, 0.24]  # Espaçamento consistente
     )
     
-    # Update X axes
+    # Configurar eixos X
     fig.update_xaxes(
         gridcolor='rgba(128,128,128,0.2)', 
         showgrid=True,
-        rangeslider=dict(visible=False)  # Removido o rangeslider para mais espaço
+        rangeslider=dict(visible=False)  # Remove o slider para mais espaço
     )
     
-    # Adjust subplot titles
+    # Ajustar posição dos títulos dos subplots
     for i in range(len(fig.layout.annotations)):
         fig.layout.annotations[i].update(
             font=dict(size=14, color='white'),
-            y=fig.layout.annotations[i].y + 0.05  # Aumentado o deslocamento do título
+            y=fig.layout.annotations[i].y + 0.03  # Ajuste fino da posição do título
         )
     
     return fig
