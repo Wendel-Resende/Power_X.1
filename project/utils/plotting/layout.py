@@ -11,13 +11,13 @@ def update_layout(fig):
             bgcolor='rgba(0,0,0,0.5)',
             bordercolor='gray',
             borderwidth=1,
-            yanchor="top",
-            y=0.99,
+            orientation="h",  # Legenda horizontal
+            yanchor="bottom",
+            y=1.02,  # Posicionada acima do gráfico
             xanchor="right",
-            x=0.99,  # Movida para a direita do gráfico principal
-            font=dict(size=10)
+            x=1
         ),
-        margin=dict(t=30, l=60, r=60, b=30)
+        margin=dict(t=50, l=60, r=60, b=30)  # Margem superior aumentada para a legenda
     )
     
     # Configurar eixos Y com domínios ajustados para melhor espaçamento

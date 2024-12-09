@@ -4,9 +4,12 @@ import pandas_ta as ta
 def calculate_stochastic(df, k=14, d=3, smooth_k=3):
     """Calculate Stochastic oscillator."""
     try:
-        stoch = ta.stoch(df['High'], df['Low'], df['Close'], k=k, d=d, smooth_k=smooth_k)
-        df['STOCH_K'] = stoch['STOCHk_14_3_3']
-        df['STOCH_D'] = stoch['STOCHd_14_3_3']
+        if df is None or df.empty:
+            raise ValueError("DataFrame vazio")
+            
+        stoch = df.ta.stoch(high='High', low='Low', close='Close', k=k, d=d, smooth_k=smooth_k)
+        df['STOCH_K'] = stoch[f'STOCHk_{k}_{d}_{smooth_k}']
+        df['STOCH_D'] = stoch[f'STOCHd_{k}_{d}_{smooth_k}']
         
         # Calcular valores anteriores para comparação
         df['STOCH_K_PREV'] = df['STOCH_K'].shift(1)
@@ -18,7 +21,10 @@ def calculate_stochastic(df, k=14, d=3, smooth_k=3):
 def calculate_rsi(df, length=7):
     """Calculate RSI indicator."""
     try:
-        df['RSI'] = ta.rsi(df['Close'], length=length)
+        if df is None or df.empty:
+            raise ValueError("DataFrame vazio")
+            
+        df['RSI'] = df.ta.rsi(close='Close', length=length)
         df['RSI_PREV'] = df['RSI'].shift(1)
         return df
     except Exception as e:
@@ -27,7 +33,10 @@ def calculate_rsi(df, length=7):
 def calculate_macd(df, fast=12, slow=26, signal=9):
     """Calculate MACD indicator."""
     try:
-        macd = ta.macd(df['Close'], fast=fast, slow=slow, signal=signal)
+        if df is None or df.empty:
+            raise ValueError("DataFrame vazio")
+            
+        macd = df.ta.macd(close='Close', fast=fast, slow=slow, signal=signal)
         df['MACD'] = macd[f'MACD_{fast}_{slow}_{signal}']
         df['MACD_SIGNAL'] = macd[f'MACDs_{fast}_{slow}_{signal}']
         df['MACD_HIST'] = macd[f'MACDh_{fast}_{slow}_{signal}']
@@ -54,7 +63,7 @@ def calculate_indicators(df):
         df['signal_color'] = df.apply(get_signal_color, axis=1)
         
         # Preencher valores NaN
-        df.fillna(method='bfill', inplace=True)
+        df = df.fillna(method='bfill').fillna(method='ffill')
         
         return df
     except Exception as e:
