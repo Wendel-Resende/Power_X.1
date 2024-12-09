@@ -1,18 +1,15 @@
 import streamlit as st
-import pandas as pd
-from utils import MT5DataManager, calculate_indicators, create_dashboard_plot, Strategy
+from utils.data import StockDataManager
+from utils.indicators import calculate_indicators
+from utils.plotting import create_dashboard_plot
+from utils.backtest import Strategy
 
 st.set_page_config(layout="wide", page_title="Dashboard Financeiro")
 
 def initialize_session_state():
     """Inicializa o estado da sessão com valores padrão."""
     if 'data_manager' not in st.session_state:
-        try:
-            st.session_state.data_manager = MT5DataManager()
-        except Exception as e:
-            st.error(f"Erro ao inicializar MT5: {str(e)}")
-            st.info("Certifique-se que o MetaTrader5 está instalado e em execução.")
-            st.stop()
+        st.session_state.data_manager = StockDataManager()
 
 def render_sidebar():
     """Renderiza a barra lateral com as configurações."""
@@ -20,25 +17,22 @@ def render_sidebar():
     
     # Seleção do ativo
     symbol = st.sidebar.text_input(
-        "Símbolo do Ativo (ex: BBDC4)",
+        "Símbolo do Ativo (ex: BBDC4.SA)",
         value=st.session_state.data_manager.default_symbol
     )
     
-    # Período e intervalo usando os valores válidos do MT5DataManager
-    valid_periods = st.session_state.data_manager.valid_periods
-    valid_intervals = st.session_state.data_manager.valid_intervals
-    
+    # Período e intervalo
     period = st.sidebar.selectbox(
         "Período",
-        options=list(valid_periods.keys()),
-        format_func=lambda x: valid_periods[x],
+        options=list(st.session_state.data_manager.valid_periods.keys()),
+        format_func=lambda x: st.session_state.data_manager.valid_periods[x],
         index=3  # 1y por padrão
     )
     
     interval = st.sidebar.selectbox(
         "Intervalo",
-        options=list(valid_intervals.keys()),
-        format_func=lambda x: valid_intervals[x],
+        options=list(st.session_state.data_manager.valid_intervals.keys()),
+        format_func=lambda x: st.session_state.data_manager.valid_intervals[x],
         index=0  # 1d por padrão
     )
     
@@ -76,29 +70,6 @@ def main():
         
         # Calcular indicadores
         df = calculate_indicators(df)
-        
-        # Adicionar colunas anteriores para comparação
-        df['STOCH_K_PREV'] = df['STOCH_K'].shift(1)
-        df['RSI_PREV'] = df['RSI'].shift(1)
-        df['MACD_PREV'] = df['MACD'].shift(1)
-        
-        # Determinar cores dos candles
-        df['signal_color'] = df.apply(lambda row: 'black', axis=1)  # cor padrão
-        
-        for i in range(1, len(df)):
-            row = df.iloc[i]
-            prev_row = df.iloc[i-1]
-            
-            stoch_condition = (row['STOCH_K'] > 50) and (row['STOCH_K'] > prev_row['STOCH_K'])
-            rsi_condition = (row['RSI'] > 50) and (row['RSI'] > prev_row['RSI'])
-            macd_condition = (row['MACD'] > row['MACD_SIGNAL']) and (row['MACD'] > prev_row['MACD'])
-            
-            conditions_met = sum([stoch_condition, rsi_condition, macd_condition])
-            
-            if conditions_met == 3:
-                df.iloc[i, df.columns.get_loc('signal_color')] = 'green'
-            elif conditions_met == 0:
-                df.iloc[i, df.columns.get_loc('signal_color')] = 'red'
         
         # Criar gráfico
         fig = create_dashboard_plot(df)
