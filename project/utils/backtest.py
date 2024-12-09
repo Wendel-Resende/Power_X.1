@@ -38,12 +38,16 @@ class Strategy:
                     # Take profit = média móvel diária * 3
                     take_profit = current_sma * 3
                     
-                    # Condições de saída
+                    # Condições de saída:
+                    # 1. Stop loss atingido
+                    # 2. Take profit atingido
+                    # 3. Sinal preto (indicadores mistos)
+                    # 4. Sinal vermelho (todos indicadores negativos)
                     stop_loss_hit = current_price <= stop_loss
                     take_profit_hit = current_price >= take_profit
-                    black_candle = current_color == 'black'
+                    exit_signal = current_color in ['black', 'red']
                     
-                    if stop_loss_hit or take_profit_hit or black_candle:
+                    if stop_loss_hit or take_profit_hit or exit_signal:
                         revenue = position * current_price * 0.998  # Considerando custos
                         cost = last_buy['cost']
                         profit = revenue - cost
@@ -51,6 +55,8 @@ class Strategy:
                         
                         self.current_capital += revenue
                         self.max_capital = max(self.max_capital, self.current_capital)
+                        
+                        exit_reason = 'stop_loss' if stop_loss_hit else 'take_profit' if take_profit_hit else 'signal'
                         
                         trades.append({
                             'date': current_date,
@@ -61,7 +67,8 @@ class Strategy:
                             'capital': self.current_capital,
                             'revenue': revenue,
                             'profit': profit,
-                            'profit_pct': profit_pct
+                            'profit_pct': profit_pct,
+                            'exit_reason': exit_reason
                         })
                         
                         position = 0
@@ -87,7 +94,8 @@ class Strategy:
                             'capital': self.current_capital,
                             'revenue': None,
                             'profit': None,
-                            'profit_pct': None
+                            'profit_pct': None,
+                            'exit_reason': None
                         })
             
             # Atualizar posições
