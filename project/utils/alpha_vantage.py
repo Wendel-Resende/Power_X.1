@@ -41,17 +41,16 @@ class AlphaVantageClient:
         av_interval = self._convert_interval(interval)
         
         params = {
-            'function': 'TIME_SERIES_INTRADAY',
+            'function': 'TIME_SERIES_DAILY',  # Alterado para TIME_SERIES_DAILY
             'symbol': symbol,
-            'interval': av_interval,
             'apikey': self.api_key,
             'outputsize': 'full',
             'datatype': 'json'
         }
         
         data = self._make_request(params)
-        if data and f'Time Series ({av_interval})' in data:
-            time_series = data[f'Time Series ({av_interval})']
+        if data and 'Time Series (Daily)' in data:  # Ajustado para Daily
+            time_series = data['Time Series (Daily)']
             df = pd.DataFrame.from_dict(time_series, orient='index')
             
             # Renomear colunas para manter padrão
