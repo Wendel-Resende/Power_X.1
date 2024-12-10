@@ -19,7 +19,7 @@ def calculate_stochastic(df, k=14, d=3, smooth_k=3):
     except Exception as e:
         raise Exception(f"Erro ao calcular Stochastic: {str(e)}")
 
-def calculate_rsi(df, length=21):  # Alterado para 21 conforme otimização
+def calculate_rsi(df, length=21):
     """Calculate RSI indicator."""
     try:
         if df is None or df.empty:
@@ -55,10 +55,10 @@ def calculate_indicators(df):
         # Criar cópia para não modificar o DataFrame original
         df = df.copy()
         
-        # Usar os parâmetros otimizados
-        df = calculate_stochastic(df, k=14, d=3, smooth_k=3)  # Mantido conforme otimização
-        df = calculate_rsi(df, length=21)  # Alterado conforme otimização
-        df = calculate_macd(df, fast=12, slow=26, signal=9)  # Mantido conforme otimização
+        # Calcular indicadores com parâmetros padrão
+        df = calculate_stochastic(df)
+        df = calculate_rsi(df)
+        df = calculate_macd(df)
         
         # Calcular sinais
         df['signal_color'] = df.apply(get_signal_color, axis=1)

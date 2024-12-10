@@ -3,7 +3,7 @@ Módulo para otimização de parâmetros da estratégia.
 """
 import pandas as pd
 import itertools
-from ..indicators import calculate_indicators
+from ..indicators import calculate_stochastic, calculate_rsi, calculate_macd
 
 def optimize_parameters(df, param_ranges):
     """
@@ -29,15 +29,13 @@ def optimize_parameters(df, param_ranges):
         stoch_k, stoch_d, rsi_length, macd_fast, macd_slow, macd_signal = params
         
         # Calcular indicadores com parâmetros atuais
-        df_test = calculate_indicators(
-            df.copy(),
-            stoch_k=stoch_k,
-            stoch_d=stoch_d,
-            rsi_length=rsi_length,
-            macd_fast=macd_fast,
-            macd_slow=macd_slow,
-            macd_signal=macd_signal
-        )
+        df_test = df.copy()
+        df_test = calculate_stochastic(df_test, k=stoch_k, d=stoch_d)
+        df_test = calculate_rsi(df_test, length=rsi_length)
+        df_test = calculate_macd(df_test, fast=macd_fast, slow=macd_slow, signal=macd_signal)
+        
+        # Calcular sinais
+        df_test['signal_color'] = df_test.apply(get_signal_color, axis=1)
         
         # Avaliar resultado
         metrics = evaluate_parameters(df_test)
@@ -82,3 +80,27 @@ def evaluate_parameters(df):
         'green_signals': green_signals,
         'red_signals': red_signals
     }
+
+def get_signal_color(row):
+    """Determine candle color based on indicator conditions."""
+    try:
+        # Stochastic condition
+        stoch_condition = (row['STOCH_K'] > 50) and (row['STOCH_K'] > row['STOCH_K_PREV'])
+        
+        # RSI condition
+        rsi_condition = (row['RSI'] > 50) and (row['RSI'] > row['RSI_PREV'])
+        
+        # MACD condition
+        macd_condition = (row['MACD'] > row['MACD_SIGNAL']) and (row['MACD'] > row['MACD_PREV'])
+        
+        # Count conditions met
+        conditions_met = sum([stoch_condition, rsi_condition, macd_condition])
+        
+        if conditions_met == 3:
+            return 'green'
+        elif conditions_met == 0:
+            return 'red'
+        else:
+            return 'black'
+    except Exception as e:
+        raise Exception(f"Erro ao determinar cor do sinal: {str(e)}")
