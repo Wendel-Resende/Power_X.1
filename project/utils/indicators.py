@@ -14,7 +14,6 @@ def calculate_stochastic(df, k=14, d=3, smooth_k=3):
         df['STOCH_K'] = stoch[f'STOCHk_{k}_{d}_{smooth_k}']
         df['STOCH_D'] = stoch[f'STOCHd_{k}_{d}_{smooth_k}']
         
-        # Calcular valores anteriores para comparação
         df['STOCH_K_PREV'] = df['STOCH_K'].shift(1)
         df['STOCH_D_PREV'] = df['STOCH_D'].shift(1)
         return df
@@ -48,8 +47,20 @@ def calculate_macd(df, fast=12, slow=26, signal=9):
     except Exception as e:
         raise Exception(f"Erro ao calcular MACD: {str(e)}")
 
-def calculate_indicators(df):
-    """Calculate all technical indicators."""
+def calculate_indicators(df, stoch_k=14, stoch_d=3, rsi_length=7, 
+                       macd_fast=12, macd_slow=26, macd_signal=9):
+    """
+    Calculate all technical indicators with customizable parameters.
+    
+    Args:
+        df: DataFrame com dados
+        stoch_k: Período K do Stochastic
+        stoch_d: Período D do Stochastic
+        rsi_length: Período do RSI
+        macd_fast: Período rápido do MACD
+        macd_slow: Período lento do MACD
+        macd_signal: Período do sinal do MACD
+    """
     if df is None or df.empty:
         raise ValueError("DataFrame está vazio ou None")
     
@@ -57,10 +68,10 @@ def calculate_indicators(df):
         # Criar cópia para não modificar o DataFrame original
         df = df.copy()
         
-        # Calcular indicadores
-        df = calculate_stochastic(df)
-        df = calculate_rsi(df)
-        df = calculate_macd(df)
+        # Calcular indicadores com parâmetros personalizados
+        df = calculate_stochastic(df, k=stoch_k, d=stoch_d, smooth_k=stoch_d)
+        df = calculate_rsi(df, length=rsi_length)
+        df = calculate_macd(df, fast=macd_fast, slow=macd_slow, signal=macd_signal)
         
         # Calcular sinais
         df['signal_color'] = df.apply(get_signal_color, axis=1)
