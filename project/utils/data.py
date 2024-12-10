@@ -34,7 +34,13 @@ class StockDataManager:
             "1m": "1m"
         }
         
-        self.alpha_vantage = AlphaVantageClient(alpha_vantage_key) if alpha_vantage_key else None
+        # Inicializar cliente Alpha Vantage se a chave estiver disponível
+        self.alpha_vantage = None
+        if alpha_vantage_key:
+            try:
+                self.alpha_vantage = AlphaVantageClient(alpha_vantage_key)
+            except Exception as e:
+                print(f"Erro ao inicializar Alpha Vantage: {str(e)}")
     
     @property
     def default_symbol(self) -> str:
@@ -60,15 +66,17 @@ class StockDataManager:
             symbol: Símbolo do ativo
             period: Período de dados
             interval: Intervalo dos dados
-            use_alpha_vantage: Se True, usa Alpha Vantage em vez do yfinance
+            use_alpha_vantage: Se True, tenta usar Alpha Vantage primeiro
         """
         try:
+            # Tentar Alpha Vantage primeiro se solicitado e disponível
             if use_alpha_vantage and self.alpha_vantage:
-                # Para dados intraday, usar Alpha Vantage
-                if interval in ['1min', '5min', '15min', '30min', '60min']:
-                    return self.alpha_vantage.get_intraday_data(symbol, interval)
-            
-            # Caso contrário, usar yfinance
+                if interval in ['1m', '5m', '15m', '30m', '1h']:
+                    df = self.alpha_vantage.get_intraday_data(symbol, interval)
+                    if not df.empty:
+                        return df
+                    
+            # Fallback para yfinance
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=interval)
             
@@ -80,45 +88,25 @@ class StockDataManager:
         except Exception as e:
             raise Exception(f"Erro ao buscar dados para {symbol}: {str(e)}")
     
-    def get_symbol_info(self, symbol: str, use_alpha_vantage: bool = False) -> Dict:
+    def get_symbol_info(self, symbol: str) -> Dict:
         """
         Retorna informações detalhadas sobre um símbolo específico.
         
         Args:
             symbol: Símbolo do ativo
-            use_alpha_vantage: Se True, inclui dados fundamentalistas da Alpha Vantage
         """
-        info = {}
-        
         try:
-            # Dados básicos do yfinance
             ticker = yf.Ticker(symbol)
-            yf_info = ticker.info
+            info = ticker.info
             
-            info.update({
+            return {
                 'name': symbol,
-                'description': yf_info.get('longName', 'N/A'),
-                'currency': yf_info.get('currency', 'BRL'),
-                'market_price': yf_info.get('regularMarketPrice', 0.0),
-                'volume': yf_info.get('regularMarketVolume', 0),
-                'sector': yf_info.get('sector', 'N/A')
-            })
-            
-            # Adicionar dados da Alpha Vantage se disponível
-            if use_alpha_vantage and self.alpha_vantage:
-                av_info = self.alpha_vantage.get_fundamental_data(symbol)
-                if av_info:
-                    info.update({
-                        'pe_ratio': av_info.get('PERatio', 'N/A'),
-                        'eps': av_info.get('EPS', 'N/A'),
-                        'dividend_yield': av_info.get('DividendYield', 'N/A'),
-                        'market_cap': av_info.get('MarketCapitalization', 'N/A'),
-                        'profit_margin': av_info.get('ProfitMargin', 'N/A'),
-                        'quarterly_earnings_growth': av_info.get('QuarterlyEarningsGrowthYOY', 'N/A')
-                    })
-            
-            return info
-            
+                'description': info.get('longName', 'N/A'),
+                'currency': info.get('currency', 'BRL'),
+                'market_price': info.get('regularMarketPrice', 0.0),
+                'volume': info.get('regularMarketVolume', 0),
+                'sector': info.get('sector', 'N/A')
+            }
         except Exception:
             return {
                 'name': symbol,

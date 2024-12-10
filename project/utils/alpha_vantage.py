@@ -3,11 +3,13 @@ Módulo para integração com a API Alpha Vantage.
 """
 import requests
 import pandas as pd
+import time
 from typing import Optional, Dict, Any
 from datetime import datetime, timedelta
 
 class AlphaVantageClient:
     def __init__(self, api_key: str):
+        """Inicializa o cliente Alpha Vantage."""
         self.api_key = api_key
         self.base_url = "https://www.alphavantage.co/query"
         self.request_limit = 5  # Limite de requisições por minuto
@@ -35,18 +37,21 @@ class AlphaVantageClient:
         # Converter símbolo para formato Alpha Vantage
         symbol = self._convert_symbol(symbol)
         
+        # Converter intervalo para formato Alpha Vantage
+        av_interval = self._convert_interval(interval)
+        
         params = {
             'function': 'TIME_SERIES_INTRADAY',
             'symbol': symbol,
-            'interval': interval,
+            'interval': av_interval,
             'apikey': self.api_key,
             'outputsize': 'full',
             'datatype': 'json'
         }
         
         data = self._make_request(params)
-        if data and f'Time Series ({interval})' in data:
-            time_series = data[f'Time Series ({interval})']
+        if data and f'Time Series ({av_interval})' in data:
+            time_series = data[f'Time Series ({av_interval})']
             df = pd.DataFrame.from_dict(time_series, orient='index')
             
             # Renomear colunas para manter padrão
@@ -59,9 +64,9 @@ class AlphaVantageClient:
             return df.sort_index()
         return pd.DataFrame()
     
-    def get_fundamental_data(self, symbol: str) -> Dict[str, Any]:
+    def get_daily_data(self, symbol: str) -> pd.DataFrame:
         """
-        Obtém dados fundamentalistas da empresa.
+        Obtém dados diários do ativo.
         
         Args:
             symbol: Símbolo do ativo
@@ -70,50 +75,38 @@ class AlphaVantageClient:
         symbol = self._convert_symbol(symbol)
         
         params = {
-            'function': 'OVERVIEW',
+            'function': 'TIME_SERIES_DAILY',
             'symbol': symbol,
-            'apikey': self.api_key
+            'apikey': self.api_key,
+            'outputsize': 'full'
         }
         
         data = self._make_request(params)
-        if data:
-            return {
-                'pe_ratio': float(data.get('PERatio', 0)) if data.get('PERatio') else None,
-                'eps': float(data.get('EPS', 0)) if data.get('EPS') else None,
-                'dividend_yield': float(data.get('DividendYield', 0)) if data.get('DividendYield') else None,
-                'market_cap': float(data.get('MarketCapitalization', 0)) if data.get('MarketCapitalization') else None,
-                'sector': data.get('Sector', 'N/A'),
-                'industry': data.get('Industry', 'N/A')
-            }
-        return {}
+        if data and 'Time Series (Daily)' in data:
+            time_series = data['Time Series (Daily)']
+            df = pd.DataFrame.from_dict(time_series, orient='index')
+            
+            # Renomear colunas
+            df.columns = [col.split('. ')[1].capitalize() for col in df.columns]
+            df.index = pd.to_datetime(df.index)
+            df = df.astype(float)
+            
+            # Reordenar colunas
+            df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
+            return df.sort_index()
+        return pd.DataFrame()
     
-    def get_quote(self, symbol: str) -> Dict[str, Any]:
-        """
-        Obtém cotação atual do ativo.
-        
-        Args:
-            symbol: Símbolo do ativo
-        """
-        self._rate_limit()
-        symbol = self._convert_symbol(symbol)
-        
-        params = {
-            'function': 'GLOBAL_QUOTE',
-            'symbol': symbol,
-            'apikey': self.api_key
+    def _convert_interval(self, interval: str) -> str:
+        """Converte intervalo do formato yfinance para Alpha Vantage."""
+        interval_map = {
+            '1m': '1min',
+            '5m': '5min',
+            '15m': '15min',
+            '30m': '30min',
+            '1h': '60min',
+            '1d': 'Daily'
         }
-        
-        data = self._make_request(params)
-        if data and 'Global Quote' in data:
-            quote = data['Global Quote']
-            return {
-                'price': float(quote.get('05. price', 0)),
-                'volume': int(quote.get('06. volume', 0)),
-                'change_percent': float(quote.get('10. change percent', '0').strip('%')),
-                'high': float(quote.get('03. high', 0)),
-                'low': float(quote.get('04. low', 0))
-            }
-        return {}
+        return interval_map.get(interval, '5min')
     
     def _convert_symbol(self, symbol: str) -> str:
         """Converte símbolo do formato B3 para Alpha Vantage."""
