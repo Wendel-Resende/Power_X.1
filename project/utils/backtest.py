@@ -42,19 +42,32 @@ class Strategy:
             'MACDs_12_26_9': 'MACD_SIGNAL'
         }, inplace=True)
         
+        # Calcular sinais
+        self.df['stoch_signal'] = (
+            (self.df['STOCH_K'] > 50) & 
+            (self.df['STOCH_K'] > self.df['STOCH_K'].shift(1))
+        )
+        
+        self.df['rsi_signal'] = (
+            (self.df['RSI'] > 50) & 
+            (self.df['RSI'] > self.df['RSI'].shift(1))
+        )
+        
+        self.df['macd_signal'] = (
+            (self.df['MACD'] > self.df['MACD_SIGNAL']) & 
+            (self.df['MACD'] > self.df['MACD'].shift(1))
+        )
+        
         for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
             current_date = self.df.index[i]
             
             # Verificar sinais usando os indicadores
-            stoch_signal = (self.df['STOCH_K'].iloc[i] > 50 and 
-                          self.df['STOCH_K'].iloc[i] > self.df['STOCH_K'].iloc[i-1])
+            stoch_signal = self.df['stoch_signal'].iloc[i]
+            rsi_signal = self.df['rsi_signal'].iloc[i]
+            macd_signal = self.df['macd_signal'].iloc[i]
             
-            rsi_signal = (self.df['RSI'].iloc[i] > 50 and 
-                         self.df['RSI'].iloc[i] > self.df['RSI'].iloc[i-1])
-            
-            macd_signal = (self.df['MACD'].iloc[i] > self.df['MACD_SIGNAL'].iloc[i] and 
-                          self.df['MACD'].iloc[i] > self.df['MACD'].iloc[i-1])
+            all_signals = stoch_signal and rsi_signal and macd_signal
             
             # Verificar condições de saída se houver posição
             if position > 0:
@@ -72,7 +85,7 @@ class Strategy:
                     # 3. Sinais mistos ou negativos
                     stop_loss_hit = current_price <= stop_loss
                     take_profit_hit = current_price >= take_profit
-                    exit_signal = not all([stoch_signal, rsi_signal, macd_signal])
+                    exit_signal = not all_signals
                     
                     if stop_loss_hit or take_profit_hit or exit_signal:
                         revenue = position * current_price * 0.998  # Considerando custos
@@ -102,7 +115,7 @@ class Strategy:
                         position = 0
             
             # Verificar sinal de compra (todos os indicadores positivos)
-            elif all([stoch_signal, rsi_signal, macd_signal]) and position == 0:
+            elif all_signals and position == 0:
                 # Calcular tamanho da posição baseado no capital disponível
                 position_size = (self.current_capital * 0.95) / current_price  # Usa até 95% do capital
                 shares = int(position_size)
