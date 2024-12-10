@@ -10,7 +10,7 @@ def initialize_session_state():
     """Inicializa o estado da sessão com valores padrão."""
     if 'data_manager' not in st.session_state:
         # Inicializar com a chave da Alpha Vantage se disponível
-        alpha_vantage_key = st.secrets.get("ALPHA_VANTAGE_KEY", None)
+        alpha_vantage_key = st.secrets.get("DS43GVA0DHOQOP5S", None)
         st.session_state.data_manager = StockDataManager(alpha_vantage_key)
 
 def render_sidebar():
