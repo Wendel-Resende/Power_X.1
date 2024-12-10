@@ -1,13 +1,22 @@
+"""
+Módulo de gerenciamento de dados com suporte a múltiplas fontes.
+"""
 import yfinance as yf
 import pandas as pd
 from typing import Dict, Optional
 from datetime import datetime, timedelta
+from .alpha_vantage import AlphaVantageClient
 
 class StockDataManager:
-    """Gerenciador de dados usando yfinance."""
+    """Gerenciador de dados com suporte a múltiplas fontes."""
     
-    def __init__(self):
-        """Inicializa o gerenciador com configurações padrão."""
+    def __init__(self, alpha_vantage_key: Optional[str] = None):
+        """
+        Inicializa o gerenciador com configurações padrão.
+        
+        Args:
+            alpha_vantage_key: Chave da API Alpha Vantage (opcional)
+        """
         self._default_symbol = 'BBDC4.SA'
         self._valid_periods = {
             "1mo": "1 mês",
@@ -24,6 +33,8 @@ class StockDataManager:
             "5m": "5m",
             "1m": "1m"
         }
+        
+        self.alpha_vantage = AlphaVantageClient(alpha_vantage_key) if alpha_vantage_key else None
     
     @property
     def default_symbol(self) -> str:
@@ -40,26 +51,24 @@ class StockDataManager:
         """Retorna os intervalos válidos."""
         return self._valid_intervals
     
-    def fetch_stock_data(self, symbol: str, period: str = '1y', interval: str = '1d') -> pd.DataFrame:
+    def fetch_stock_data(self, symbol: str, period: str = '1y', interval: str = '1d', 
+                        use_alpha_vantage: bool = False) -> pd.DataFrame:
         """
-        Busca dados históricos usando yfinance.
+        Busca dados históricos usando a fonte especificada.
         
         Args:
             symbol: Símbolo do ativo
-            period: Período de dados ('1mo', '3mo', '6mo', '1y', '2y', '5y')
-            interval: Intervalo dos dados ('1d', '1h', '15m', '5m', '1m')
-            
-        Returns:
-            DataFrame com os dados históricos
+            period: Período de dados
+            interval: Intervalo dos dados
+            use_alpha_vantage: Se True, usa Alpha Vantage em vez do yfinance
         """
         try:
-            # Validar período e intervalo
-            if period not in self._valid_periods:
-                raise ValueError(f"Período inválido: {period}")
-            if interval not in self._valid_intervals:
-                raise ValueError(f"Intervalo inválido: {interval}")
+            if use_alpha_vantage and self.alpha_vantage:
+                # Para dados intraday, usar Alpha Vantage
+                if interval in ['1min', '5min', '15min', '30min', '60min']:
+                    return self.alpha_vantage.get_intraday_data(symbol, interval)
             
-            # Buscar dados do yfinance
+            # Caso contrário, usar yfinance
             ticker = yf.Ticker(symbol)
             df = ticker.history(period=period, interval=interval)
             
@@ -67,32 +76,49 @@ class StockDataManager:
                 raise ValueError(f"Não há dados disponíveis para {symbol}")
             
             return df
-        
+            
         except Exception as e:
             raise Exception(f"Erro ao buscar dados para {symbol}: {str(e)}")
     
-    def get_symbol_info(self, symbol: str) -> Dict:
+    def get_symbol_info(self, symbol: str, use_alpha_vantage: bool = False) -> Dict:
         """
         Retorna informações detalhadas sobre um símbolo específico.
         
         Args:
             symbol: Símbolo do ativo
-            
-        Returns:
-            Dicionário com informações do ativo
+            use_alpha_vantage: Se True, inclui dados fundamentalistas da Alpha Vantage
         """
+        info = {}
+        
         try:
+            # Dados básicos do yfinance
             ticker = yf.Ticker(symbol)
-            info = ticker.info
+            yf_info = ticker.info
             
-            return {
+            info.update({
                 'name': symbol,
-                'description': info.get('longName', 'N/A'),
-                'currency': info.get('currency', 'BRL'),
-                'market_price': info.get('regularMarketPrice', 0.0),
-                'volume': info.get('regularMarketVolume', 0),
-                'sector': info.get('sector', 'N/A')
-            }
+                'description': yf_info.get('longName', 'N/A'),
+                'currency': yf_info.get('currency', 'BRL'),
+                'market_price': yf_info.get('regularMarketPrice', 0.0),
+                'volume': yf_info.get('regularMarketVolume', 0),
+                'sector': yf_info.get('sector', 'N/A')
+            })
+            
+            # Adicionar dados da Alpha Vantage se disponível
+            if use_alpha_vantage and self.alpha_vantage:
+                av_info = self.alpha_vantage.get_fundamental_data(symbol)
+                if av_info:
+                    info.update({
+                        'pe_ratio': av_info.get('PERatio', 'N/A'),
+                        'eps': av_info.get('EPS', 'N/A'),
+                        'dividend_yield': av_info.get('DividendYield', 'N/A'),
+                        'market_cap': av_info.get('MarketCapitalization', 'N/A'),
+                        'profit_margin': av_info.get('ProfitMargin', 'N/A'),
+                        'quarterly_earnings_growth': av_info.get('QuarterlyEarningsGrowthYOY', 'N/A')
+                    })
+            
+            return info
+            
         except Exception:
             return {
                 'name': symbol,

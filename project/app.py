@@ -9,7 +9,9 @@ st.set_page_config(layout="wide", page_title="Dashboard Financeiro")
 def initialize_session_state():
     """Inicializa o estado da sessão com valores padrão."""
     if 'data_manager' not in st.session_state:
-        st.session_state.data_manager = StockDataManager()
+        # Inicializar com a chave da Alpha Vantage se disponível
+        alpha_vantage_key = st.secrets.get("ALPHA_VANTAGE_KEY", None)
+        st.session_state.data_manager = StockDataManager(alpha_vantage_key)
 
 def render_sidebar():
     """Renderiza a barra lateral com as configurações."""
@@ -36,6 +38,15 @@ def render_sidebar():
         index=0  # 1d por padrão
     )
     
+    # Opção para usar Alpha Vantage
+    use_alpha_vantage = False
+    if hasattr(st.session_state.data_manager, 'alpha_vantage'):
+        use_alpha_vantage = st.sidebar.checkbox(
+            "Usar Alpha Vantage para dados intraday",
+            value=False,
+            help="Utiliza a API Alpha Vantage para dados intraday mais precisos"
+        )
+    
     # Configurações de Backtesting
     st.sidebar.header("Backtesting")
     initial_capital = st.sidebar.number_input(
@@ -48,7 +59,7 @@ def render_sidebar():
     
     run_backtest = st.sidebar.button("Executar Backtest")
     
-    return symbol, period, interval, initial_capital, run_backtest
+    return symbol, period, interval, use_alpha_vantage, initial_capital, run_backtest
 
 def main():
     st.title("Dashboard Financeiro - Análise Técnica")
@@ -57,16 +68,33 @@ def main():
     initialize_session_state()
     
     # Renderizar sidebar e obter configurações
-    symbol, period, interval, initial_capital, run_backtest = render_sidebar()
+    symbol, period, interval, use_alpha_vantage, initial_capital, run_backtest = render_sidebar()
     
     try:
         # Carregar dados
         with st.spinner('Carregando dados do ativo...'):
-            df = st.session_state.data_manager.fetch_stock_data(symbol, period, interval)
+            df = st.session_state.data_manager.fetch_stock_data(
+                symbol, period, interval, use_alpha_vantage
+            )
+            
+            # Carregar informações adicionais do ativo
+            info = st.session_state.data_manager.get_symbol_info(
+                symbol, use_alpha_vantage
+            )
         
         if df.empty:
             st.warning("Não há dados disponíveis para o período selecionado.")
             return
+        
+        # Exibir informações do ativo
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Preço Atual", f"R$ {info['market_price']:.2f}")
+        with col2:
+            st.metric("Volume", f"{info['volume']:,}")
+        with col3:
+            if 'pe_ratio' in info:
+                st.metric("P/L", info['pe_ratio'])
         
         # Calcular indicadores
         df = calculate_indicators(df)

@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import pandas_ta as ta
 from datetime import datetime
 
 class Strategy:
@@ -19,50 +18,14 @@ class Strategy:
         trades = []
         self.current_capital = self.initial_capital
         
-        # Calcular indicadores usando pandas_ta
-        # SMA
-        sma = self.df.ta.sma(close='Close', length=7)
-        self.df['SMA_DAILY'] = sma
-        
-        # Stochastic
-        stoch = self.df.ta.stoch(high='High', low='Low', close='Close', k=14, d=3, smooth_k=3)
-        self.df['STOCH_K'] = stoch['STOCHk_14_3_3']
-        self.df['STOCH_D'] = stoch['STOCHd_14_3_3']
-        
-        # RSI
-        self.df['RSI'] = self.df.ta.rsi(close='Close', length=7)
-        
-        # MACD
-        macd = self.df.ta.macd(close='Close', fast=12, slow=26, signal=9)
-        self.df['MACD'] = macd[f'MACD_12_26_9']
-        self.df['MACD_SIGNAL'] = macd[f'MACDs_12_26_9']
-        
-        # Calcular sinais
-        self.df['stoch_signal'] = (
-            (self.df['STOCH_K'] > 50) & 
-            (self.df['STOCH_K'] > self.df['STOCH_K'].shift(1))
-        ).astype(int)
-        
-        self.df['rsi_signal'] = (
-            (self.df['RSI'] > 50) & 
-            (self.df['RSI'] > self.df['RSI'].shift(1))
-        ).astype(int)
-        
-        self.df['macd_signal'] = (
-            (self.df['MACD'] > self.df['MACD_SIGNAL']) & 
-            (self.df['MACD'] > self.df['MACD'].shift(1))
-        ).astype(int)
+        # Calcular média móvel diária para stop loss e take profit
+        self.df['SMA_DAILY'] = self.df['Close'].rolling(window=7).mean()
         
         for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
             current_date = self.df.index[i]
-            
-            # Verificar sinais usando os indicadores
-            stoch_signal = bool(self.df['stoch_signal'].iloc[i])
-            rsi_signal = bool(self.df['rsi_signal'].iloc[i])
-            macd_signal = bool(self.df['macd_signal'].iloc[i])
-            
-            all_signals = stoch_signal and rsi_signal and macd_signal
+            current_color = self.df['signal_color'].iloc[i]
+            current_sma = self.df['SMA_DAILY'].iloc[i]
             
             # Verificar condições de saída se houver posição
             if position > 0:
@@ -70,17 +33,19 @@ class Strategy:
                 if last_buy:
                     entry_price = last_buy['price']
                     
-                    # Stop loss e take profit baseados na média móvel
-                    stop_loss = self.df['SMA_DAILY'].iloc[i] * 0.95  # 5% abaixo da média
-                    take_profit = self.df['SMA_DAILY'].iloc[i] * 1.05  # 5% acima da média
+                    # Stop loss = média móvel diária * 1.5
+                    stop_loss = current_sma * 1.5
+                    # Take profit = média móvel diária * 3
+                    take_profit = current_sma * 3
                     
                     # Condições de saída:
                     # 1. Stop loss atingido
                     # 2. Take profit atingido
-                    # 3. Sinais mistos ou negativos
+                    # 3. Sinal preto (indicadores mistos)
+                    # 4. Sinal vermelho (todos indicadores negativos)
                     stop_loss_hit = current_price <= stop_loss
                     take_profit_hit = current_price >= take_profit
-                    exit_signal = not all_signals
+                    exit_signal = current_color in ['black', 'red']
                     
                     if stop_loss_hit or take_profit_hit or exit_signal:
                         revenue = position * current_price * 0.998  # Considerando custos
@@ -91,8 +56,7 @@ class Strategy:
                         self.current_capital += revenue
                         self.max_capital = max(self.max_capital, self.current_capital)
                         
-                        exit_reason = ('stop_loss' if stop_loss_hit else 
-                                     'take_profit' if take_profit_hit else 'signal')
+                        exit_reason = 'stop_loss' if stop_loss_hit else 'take_profit' if take_profit_hit else 'signal'
                         
                         trades.append({
                             'date': current_date,
@@ -109,8 +73,8 @@ class Strategy:
                         
                         position = 0
             
-            # Verificar sinal de compra (todos os indicadores positivos)
-            elif all_signals and position == 0:
+            # Verificar sinal de compra (apenas em candles verdes)
+            elif current_color == 'green' and position == 0:
                 # Calcular tamanho da posição baseado no capital disponível
                 position_size = (self.current_capital * 0.95) / current_price  # Usa até 95% do capital
                 shares = int(position_size)
