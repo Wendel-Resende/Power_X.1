@@ -19,7 +19,7 @@ def calculate_stochastic(df, k=14, d=3, smooth_k=3):
     except Exception as e:
         raise Exception(f"Erro ao calcular Stochastic: {str(e)}")
 
-def calculate_rsi(df, length=21):
+def calculate_rsi(df, length=7):
     """Calculate RSI indicator."""
     try:
         if df is None or df.empty:
@@ -52,10 +52,9 @@ def calculate_indicators(df):
         raise ValueError("DataFrame está vazio ou None")
     
     try:
-        # Criar cópia para não modificar o DataFrame original
         df = df.copy()
         
-        # Calcular indicadores com parâmetros padrão
+        # Calcular indicadores
         df = calculate_stochastic(df)
         df = calculate_rsi(df)
         df = calculate_macd(df)
@@ -76,7 +75,7 @@ def get_signal_color(row):
         # Stochastic condition
         stoch_condition = (row['STOCH_K'] > 50) and (row['STOCH_K'] > row['STOCH_K_PREV'])
         
-        # RSI condition (usando 50 como nível)
+        # RSI condition
         rsi_condition = (row['RSI'] > 50) and (row['RSI'] > row['RSI_PREV'])
         
         # MACD condition

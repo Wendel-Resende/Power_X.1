@@ -28,33 +28,25 @@ def create_analysis_charts(df, trades_df=None):
     )
     
     # Distribuição de Retornos
-    if trades_df is not None and not trades_df.empty:
-        returns = trades_df[trades_df['type'] == 'sell']['profit_pct'].dropna()
-        if not returns.empty:
-            fig.add_trace(
-                go.Histogram(
-                    x=returns,
-                    nbinsx=30,
-                    name='Retornos',
-                    showlegend=False
-                ),
-                row=1, col=1
-            )
+    returns = df['Close'].pct_change().dropna()
+    fig.add_trace(
+        go.Histogram(
+            x=returns,
+            nbinsx=30,
+            name='Retornos',
+            showlegend=False
+        ),
+        row=1, col=1
+    )
     
     # Curva de Capital
     if trades_df is not None and not trades_df.empty:
-        # Reconstruir curva de capital
-        capital_curve = pd.Series(index=df.index, dtype=float)
-        capital_curve.iloc[0] = 10000.0  # Capital inicial
+        capital_curve = pd.Series(index=df.index, data=10000.0)  # Capital inicial
         
         for _, trade in trades_df.iterrows():
             if trade['type'] == 'sell':
                 idx = df.index.get_loc(trade['date'])
-                capital_curve.iloc[idx] = trade['capital']
-        
-        # Preencher valores intermediários
-        capital_curve = capital_curve.fillna(method='ffill')
-        capital_curve = capital_curve.fillna(method='bfill')
+                capital_curve.iloc[idx:] = trade['capital']
         
         fig.add_trace(
             go.Scatter(
@@ -67,7 +59,9 @@ def create_analysis_charts(df, trades_df=None):
         )
         
         # Drawdown
-        drawdown = calculate_drawdown_series(capital_curve)
+        rolling_max = capital_curve.expanding().max()
+        drawdown = (capital_curve - rolling_max) / rolling_max * 100
+        
         fig.add_trace(
             go.Scatter(
                 x=df.index,
@@ -107,14 +101,3 @@ def create_analysis_charts(df, trades_df=None):
     fig.update_yaxes(gridcolor='rgba(128,128,128,0.2)', showgrid=True)
     
     return fig
-
-def calculate_drawdown_series(equity_curve):
-    """
-    Calcula série temporal de drawdown.
-    
-    Args:
-        equity_curve: Série temporal com valores de capital
-    """
-    rolling_max = equity_curve.expanding().max()
-    drawdown = (equity_curve - rolling_max) / rolling_max * 100
-    return drawdown
