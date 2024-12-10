@@ -3,13 +3,16 @@ from utils.data import StockDataManager
 from utils.indicators import calculate_indicators
 from utils.plotting import create_dashboard_plot
 from utils.backtest import Strategy
+from utils.analysis.metrics import calculate_risk_metrics
+from utils.analysis.optimization import optimize_parameters
+from utils.visualization.charts import create_analysis_charts
+from utils.visualization.indicators import create_indicator_charts
 
 st.set_page_config(layout="wide", page_title="Dashboard Financeiro")
 
 def initialize_session_state():
     """Inicializa o estado da sessão com valores padrão."""
     if 'data_manager' not in st.session_state:
-        # Inicializar com a chave da Alpha Vantage se disponível
         alpha_vantage_key = st.secrets.get("ALPHA_VANTAGE_KEY", None)
         st.session_state.data_manager = StockDataManager(alpha_vantage_key)
 
@@ -23,7 +26,7 @@ def render_sidebar():
         value=st.session_state.data_manager.default_symbol
     )
     
-    # Período e intervalo
+    # Período
     period = st.sidebar.selectbox(
         "Período",
         options=list(st.session_state.data_manager.valid_periods.keys()),
@@ -50,9 +53,13 @@ def render_sidebar():
         format="%.2f"
     )
     
+    # Otimização de Parâmetros
+    st.sidebar.header("Otimização")
+    optimize = st.sidebar.checkbox("Otimizar Parâmetros", value=False)
+    
     run_backtest = st.sidebar.button("Executar Backtest")
     
-    return symbol, period, '1d', use_alpha_vantage, initial_capital, run_backtest
+    return symbol, period, '1d', use_alpha_vantage, initial_capital, run_backtest, optimize
 
 def main():
     st.title("Dashboard Financeiro - Análise Técnica")
@@ -61,7 +68,7 @@ def main():
     initialize_session_state()
     
     # Renderizar sidebar e obter configurações
-    symbol, period, interval, use_alpha_vantage, initial_capital, run_backtest = render_sidebar()
+    symbol, period, interval, use_alpha_vantage, initial_capital, run_backtest, optimize = render_sidebar()
     
     try:
         # Carregar dados
@@ -70,7 +77,6 @@ def main():
                 symbol, period, interval, use_alpha_vantage
             )
             
-            # Carregar informações adicionais do ativo
             info = st.session_state.data_manager.get_symbol_info(
                 symbol, use_alpha_vantage
             )
@@ -92,19 +98,40 @@ def main():
         # Calcular indicadores
         df = calculate_indicators(df)
         
-        # Criar gráfico
+        # Criar gráfico principal
         fig = create_dashboard_plot(df)
         st.plotly_chart(fig, use_container_width=True)
+        
+        # Criar gráfico de indicadores
+        st.subheader("Análise de Indicadores")
+        fig_indicators = create_indicator_charts(df)
+        st.plotly_chart(fig_indicators, use_container_width=True)
         
         # Executar backtest se solicitado
         if run_backtest:
             st.header("Resultados do Backtest")
             
+            # Otimizar parâmetros se solicitado
+            if optimize:
+                with st.spinner("Otimizando parâmetros..."):
+                    param_ranges = {
+                        'stoch_k': [14, 21, 28],
+                        'stoch_d': [3, 5, 7],
+                        'rsi_length': [7, 14, 21],
+                        'macd_fast': [12, 15, 18],
+                        'macd_slow': [26, 30, 34],
+                        'macd_signal': [9, 12, 15]
+                    }
+                    results = optimize_parameters(df, param_ranges)
+                    
+                    st.subheader("Resultados da Otimização")
+                    st.dataframe(results.sort_values('accuracy', ascending=False).head())
+            
             strategy = Strategy(df, initial_capital)
             trades = strategy.run_backtest()
             metrics = strategy.get_metrics(trades)
             
-            # Exibir métricas em colunas
+            # Métricas básicas
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("Retorno Total", f"{metrics['total_return']:.2f}%")
@@ -116,7 +143,23 @@ def main():
                 st.metric("Drawdown Máximo", f"{metrics['max_drawdown']:.2f}%")
                 st.metric("Trades Lucrativos", metrics['profitable_trades'])
             
-            # Exibir histórico de trades
+            # Métricas avançadas de risco
+            risk_metrics = calculate_risk_metrics(strategy.positions)
+            st.subheader("Métricas de Risco")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Sharpe Ratio", f"{risk_metrics['sharpe_ratio']:.2f}")
+            with col2:
+                st.metric("Sortino Ratio", f"{risk_metrics['sortino_ratio']:.2f}")
+            with col3:
+                st.metric("Calmar Ratio", f"{risk_metrics['calmar_ratio']:.2f}")
+            
+            # Gráficos de análise
+            st.subheader("Análise Detalhada")
+            fig_analysis = create_analysis_charts(df, trades)
+            st.plotly_chart(fig_analysis, use_container_width=True)
+            
+            # Histórico de trades
             if not trades.empty:
                 st.subheader("Histórico de Trades")
                 st.dataframe(trades)
