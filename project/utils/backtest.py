@@ -19,53 +19,48 @@ class Strategy:
         trades = []
         self.current_capital = self.initial_capital
         
-        # Calcular indicadores usando pandas_ta no DataFrame
+        # Calcular indicadores usando pandas_ta
         # SMA
-        self.df.ta.sma(close='Close', length=7, append=True)
+        sma = self.df.ta.sma(close='Close', length=7)
+        self.df['SMA_DAILY'] = sma
         
         # Stochastic
-        self.df.ta.stoch(high='High', low='Low', close='Close', k=14, d=3, smooth_k=3, append=True)
+        stoch = self.df.ta.stoch(high='High', low='Low', close='Close', k=14, d=3, smooth_k=3)
+        self.df['STOCH_K'] = stoch['STOCHk_14_3_3']
+        self.df['STOCH_D'] = stoch['STOCHd_14_3_3']
         
         # RSI
-        self.df.ta.rsi(close='Close', length=7, append=True)
+        self.df['RSI'] = self.df.ta.rsi(close='Close', length=7)
         
         # MACD
-        self.df.ta.macd(close='Close', fast=12, slow=26, signal=9, append=True)
-        
-        # Renomear colunas para facilitar acesso
-        self.df.rename(columns={
-            'SMA_7': 'SMA_DAILY',
-            'STOCHk_14_3_3': 'STOCH_K',
-            'STOCHd_14_3_3': 'STOCH_D',
-            'RSI_7': 'RSI',
-            'MACD_12_26_9': 'MACD',
-            'MACDs_12_26_9': 'MACD_SIGNAL'
-        }, inplace=True)
+        macd = self.df.ta.macd(close='Close', fast=12, slow=26, signal=9)
+        self.df['MACD'] = macd[f'MACD_12_26_9']
+        self.df['MACD_SIGNAL'] = macd[f'MACDs_12_26_9']
         
         # Calcular sinais
         self.df['stoch_signal'] = (
             (self.df['STOCH_K'] > 50) & 
             (self.df['STOCH_K'] > self.df['STOCH_K'].shift(1))
-        )
+        ).astype(int)
         
         self.df['rsi_signal'] = (
             (self.df['RSI'] > 50) & 
             (self.df['RSI'] > self.df['RSI'].shift(1))
-        )
+        ).astype(int)
         
         self.df['macd_signal'] = (
             (self.df['MACD'] > self.df['MACD_SIGNAL']) & 
             (self.df['MACD'] > self.df['MACD'].shift(1))
-        )
+        ).astype(int)
         
         for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
             current_date = self.df.index[i]
             
             # Verificar sinais usando os indicadores
-            stoch_signal = self.df['stoch_signal'].iloc[i]
-            rsi_signal = self.df['rsi_signal'].iloc[i]
-            macd_signal = self.df['macd_signal'].iloc[i]
+            stoch_signal = bool(self.df['stoch_signal'].iloc[i])
+            rsi_signal = bool(self.df['rsi_signal'].iloc[i])
+            macd_signal = bool(self.df['macd_signal'].iloc[i])
             
             all_signals = stoch_signal and rsi_signal and macd_signal
             
