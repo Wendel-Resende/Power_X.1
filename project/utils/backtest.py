@@ -19,21 +19,28 @@ class Strategy:
         trades = []
         self.current_capital = self.initial_capital
         
-        # Calcular indicadores usando pandas-ta
-        self.df['SMA_DAILY'] = self.df['Close'].ta.sma(length=7)
+        # Calcular indicadores usando pandas_ta no DataFrame
+        # SMA
+        self.df.ta.sma(close='Close', length=7, append=True)
         
         # Stochastic
-        stoch = self.df.ta.stoch(high='High', low='Low', close='Close', k=14, d=3, smooth_k=3)
-        self.df['STOCH_K'] = stoch[f'STOCHk_14_3_3']
-        self.df['STOCH_D'] = stoch[f'STOCHd_14_3_3']
+        self.df.ta.stoch(high='High', low='Low', close='Close', k=14, d=3, smooth_k=3, append=True)
         
         # RSI
-        self.df['RSI'] = self.df.ta.rsi(close='Close', length=7)
+        self.df.ta.rsi(close='Close', length=7, append=True)
         
         # MACD
-        macd = self.df.ta.macd(close='Close', fast=12, slow=26, signal=9)
-        self.df['MACD'] = macd[f'MACD_12_26_9']
-        self.df['MACD_SIGNAL'] = macd[f'MACDs_12_26_9']
+        self.df.ta.macd(close='Close', fast=12, slow=26, signal=9, append=True)
+        
+        # Renomear colunas para facilitar acesso
+        self.df.rename(columns={
+            'SMA_7': 'SMA_DAILY',
+            'STOCHk_14_3_3': 'STOCH_K',
+            'STOCHd_14_3_3': 'STOCH_D',
+            'RSI_7': 'RSI',
+            'MACD_12_26_9': 'MACD',
+            'MACDs_12_26_9': 'MACD_SIGNAL'
+        }, inplace=True)
         
         for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
