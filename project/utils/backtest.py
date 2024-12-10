@@ -4,6 +4,7 @@ Módulo de backtesting usando pandas_ta para indicadores.
 import pandas as pd
 import pandas_ta as ta
 from datetime import datetime
+import numpy as np
 
 class Strategy:
     def __init__(self, df, initial_capital=10000.0):
@@ -19,7 +20,7 @@ class Strategy:
         self.positions = pd.DataFrame(index=df.index)
         self.positions['position'] = 0
         self.positions['capital'] = initial_capital
-        self.positions['equity_curve'] = initial_capital
+        self.positions['equity'] = initial_capital  # Renomeado de equity_curve para equity
         self.current_capital = initial_capital
         self.max_capital = initial_capital
     
@@ -77,6 +78,9 @@ class Strategy:
         position = 0
         trades = []
         self.current_capital = self.initial_capital
+        
+        # Inicializar curva de capital
+        self.positions['equity'] = self.initial_capital
         
         for i in range(1, len(self.df)):
             current_price = float(self.df['Close'].iloc[i])
@@ -141,7 +145,7 @@ class Strategy:
             self.positions.iloc[i] = {
                 'position': position,
                 'capital': self.current_capital,
-                'equity_curve': current_equity
+                'equity': current_equity  # Usando 'equity' em vez de 'equity_curve'
             }
         
         trades_df = pd.DataFrame(trades)
@@ -174,7 +178,7 @@ class Strategy:
         profitable_trades = len(sell_trades[sell_trades['profit'] > 0])
         
         # Cálculo do retorno total
-        final_capital = float(self.positions['equity_curve'].iloc[-1])
+        final_capital = float(self.positions['equity'].iloc[-1])  # Usando 'equity'
         total_return = ((final_capital - self.initial_capital) / self.initial_capital) * 100
         
         # Cálculo do retorno anualizado
@@ -188,7 +192,7 @@ class Strategy:
             annual_return = total_return
         
         # Cálculo do drawdown máximo
-        portfolio_values = self.positions['equity_curve']
+        portfolio_values = self.positions['equity']  # Usando 'equity'
         rolling_max = portfolio_values.expanding(min_periods=1).max()
         drawdowns = (portfolio_values - rolling_max) / rolling_max * 100
         max_drawdown = abs(drawdowns.min())
