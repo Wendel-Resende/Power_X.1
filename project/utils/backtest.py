@@ -39,8 +39,8 @@ class Strategy:
         df['MACD_SIGNAL'] = macd[f'MACDs_12_26_9']
         df['MACD_PREV'] = df['MACD'].shift(1)
         
-        # Volume Force Index
-        df['VFI'] = df.ta.vfi(high=df['High'], low=df['Low'], close=df['Close'], volume=df['Volume'])
+        # Volume EMV (Ease of Movement) como substituto do VFI
+        df['EMV'] = df.ta.emv(high=df['High'], low=df['Low'], volume=df['Volume'])
         
         # Average True Range para Stop Loss
         df['ATR'] = df.ta.atr(high=df['High'], low=df['Low'], close=df['Close'], length=14)
@@ -59,8 +59,8 @@ class Strategy:
             # 3. Momentum (RSI)
             momentum = row['RSI'] > 50 and row['RSI'] < 70
             
-            # 4. Volume Force Index
-            volume_confirmation = row['VFI'] > 0
+            # 4. Volume EMV
+            volume_confirmation = row['EMV'] > 0
             
             # 5. Stochastic
             stoch_signal = (row['STOCH_K'] > 20 and row['STOCH_K'] < 80 and 
@@ -99,8 +99,8 @@ class Strategy:
             # 3. Momentum
             momentum_exit = row['RSI'] > 80 or row['RSI'] < 30
             
-            # 4. Volume Force Index
-            volume_exit = row['VFI'] < 0
+            # 4. Volume EMV
+            volume_exit = row['EMV'] < 0
             
             # 5. Stochastic
             stoch_exit = row['STOCH_K'] > 80 or row['STOCH_K'] < 20
