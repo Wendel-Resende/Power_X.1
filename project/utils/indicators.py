@@ -1,3 +1,6 @@
+"""
+Módulo para cálculo de indicadores técnicos usando pandas_ta.
+"""
 import pandas as pd
 import pandas_ta as ta
 
