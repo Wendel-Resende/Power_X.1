@@ -13,14 +13,13 @@ def calculate_stochastic(df, k=14, d=3, smooth_k=3):
         stoch = df.ta.stoch(high='High', low='Low', close='Close', k=k, d=d, smooth_k=smooth_k)
         df['STOCH_K'] = stoch[f'STOCHk_{k}_{d}_{smooth_k}']
         df['STOCH_D'] = stoch[f'STOCHd_{k}_{d}_{smooth_k}']
-        
         df['STOCH_K_PREV'] = df['STOCH_K'].shift(1)
         df['STOCH_D_PREV'] = df['STOCH_D'].shift(1)
         return df
     except Exception as e:
         raise Exception(f"Erro ao calcular Stochastic: {str(e)}")
 
-def calculate_rsi(df, length=7):
+def calculate_rsi(df, length=21):  # Alterado para 21 conforme otimização
     """Calculate RSI indicator."""
     try:
         if df is None or df.empty:
@@ -47,20 +46,8 @@ def calculate_macd(df, fast=12, slow=26, signal=9):
     except Exception as e:
         raise Exception(f"Erro ao calcular MACD: {str(e)}")
 
-def calculate_indicators(df, stoch_k=14, stoch_d=3, rsi_length=7, 
-                       macd_fast=12, macd_slow=26, macd_signal=9):
-    """
-    Calculate all technical indicators with customizable parameters.
-    
-    Args:
-        df: DataFrame com dados
-        stoch_k: Período K do Stochastic
-        stoch_d: Período D do Stochastic
-        rsi_length: Período do RSI
-        macd_fast: Período rápido do MACD
-        macd_slow: Período lento do MACD
-        macd_signal: Período do sinal do MACD
-    """
+def calculate_indicators(df):
+    """Calculate all technical indicators."""
     if df is None or df.empty:
         raise ValueError("DataFrame está vazio ou None")
     
@@ -68,10 +55,10 @@ def calculate_indicators(df, stoch_k=14, stoch_d=3, rsi_length=7,
         # Criar cópia para não modificar o DataFrame original
         df = df.copy()
         
-        # Calcular indicadores com parâmetros personalizados
-        df = calculate_stochastic(df, k=stoch_k, d=stoch_d, smooth_k=stoch_d)
-        df = calculate_rsi(df, length=rsi_length)
-        df = calculate_macd(df, fast=macd_fast, slow=macd_slow, signal=macd_signal)
+        # Usar os parâmetros otimizados
+        df = calculate_stochastic(df, k=14, d=3, smooth_k=3)  # Mantido conforme otimização
+        df = calculate_rsi(df, length=21)  # Alterado conforme otimização
+        df = calculate_macd(df, fast=12, slow=26, signal=9)  # Mantido conforme otimização
         
         # Calcular sinais
         df['signal_color'] = df.apply(get_signal_color, axis=1)
@@ -89,7 +76,7 @@ def get_signal_color(row):
         # Stochastic condition
         stoch_condition = (row['STOCH_K'] > 50) and (row['STOCH_K'] > row['STOCH_K_PREV'])
         
-        # RSI condition
+        # RSI condition (usando 50 como nível)
         rsi_condition = (row['RSI'] > 50) and (row['RSI'] > row['RSI_PREV'])
         
         # MACD condition
