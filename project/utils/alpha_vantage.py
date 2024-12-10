@@ -4,7 +4,7 @@ Módulo para integração com a API Alpha Vantage.
 import requests
 import pandas as pd
 import time
-from typing import Optional, Dict, Any
+from typing import Optional, Dict
 from datetime import datetime, timedelta
 
 class AlphaVantageClient:
@@ -24,24 +24,23 @@ class AlphaVantageClient:
                 time.sleep(wait_time)
         self.last_request = now
     
-    def get_intraday_data(self, symbol: str, interval: str = '5min') -> pd.DataFrame:
+    def get_daily_data(self, symbol: str) -> pd.DataFrame:
         """
-        Obtém dados intraday com maior granularidade.
+        Obtém dados diários do ativo.
         
         Args:
             symbol: Símbolo do ativo (ex: BBDC4.SA -> BBDC4.SAO)
-            interval: Intervalo ('1min', '5min', '15min', '30min', '60min')
+            
+        Returns:
+            DataFrame com os dados históricos diários
         """
         self._rate_limit()
         
         # Converter símbolo para formato Alpha Vantage
         symbol = self._convert_symbol(symbol)
         
-        # Converter intervalo para formato Alpha Vantage
-        av_interval = self._convert_interval(interval)
-        
         params = {
-            'function': 'TIME_SERIES_DAILY',  # Alterado para TIME_SERIES_DAILY
+            'function': 'TIME_SERIES_DAILY',  # Usando dados diários
             'symbol': symbol,
             'apikey': self.api_key,
             'outputsize': 'full',
@@ -49,11 +48,11 @@ class AlphaVantageClient:
         }
         
         data = self._make_request(params)
-        if data and 'Time Series (Daily)' in data:  # Ajustado para Daily
+        if data and 'Time Series (Daily)' in data:
             time_series = data['Time Series (Daily)']
             df = pd.DataFrame.from_dict(time_series, orient='index')
             
-            # Renomear colunas para manter padrão
+            # Renomear colunas para manter compatibilidade
             df.columns = [col.split('. ')[1].capitalize() for col in df.columns]
             df.index = pd.to_datetime(df.index)
             df = df.astype(float)
@@ -62,50 +61,6 @@ class AlphaVantageClient:
             df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
             return df.sort_index()
         return pd.DataFrame()
-    
-    def get_daily_data(self, symbol: str) -> pd.DataFrame:
-        """
-        Obtém dados diários do ativo.
-        
-        Args:
-            symbol: Símbolo do ativo
-        """
-        self._rate_limit()
-        symbol = self._convert_symbol(symbol)
-        
-        params = {
-            'function': 'TIME_SERIES_DAILY',
-            'symbol': symbol,
-            'apikey': self.api_key,
-            'outputsize': 'full'
-        }
-        
-        data = self._make_request(params)
-        if data and 'Time Series (Daily)' in data:
-            time_series = data['Time Series (Daily)']
-            df = pd.DataFrame.from_dict(time_series, orient='index')
-            
-            # Renomear colunas
-            df.columns = [col.split('. ')[1].capitalize() for col in df.columns]
-            df.index = pd.to_datetime(df.index)
-            df = df.astype(float)
-            
-            # Reordenar colunas
-            df = df[['Open', 'High', 'Low', 'Close', 'Volume']]
-            return df.sort_index()
-        return pd.DataFrame()
-    
-    def _convert_interval(self, interval: str) -> str:
-        """Converte intervalo do formato yfinance para Alpha Vantage."""
-        interval_map = {
-            '1m': '1min',
-            '5m': '5min',
-            '15m': '15min',
-            '30m': '30min',
-            '1h': '60min',
-            '1d': 'Daily'
-        }
-        return interval_map.get(interval, '5min')
     
     def _convert_symbol(self, symbol: str) -> str:
         """Converte símbolo do formato B3 para Alpha Vantage."""

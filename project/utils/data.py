@@ -69,19 +69,38 @@ class StockDataManager:
             use_alpha_vantage: Se True, tenta usar Alpha Vantage primeiro
         """
         try:
+            df = None
             # Tentar Alpha Vantage primeiro se solicitado e disponível
             if use_alpha_vantage and self.alpha_vantage:
-                if interval in ['1m', '5m', '15m', '30m', '1h']:
-                    df = self.alpha_vantage.get_intraday_data(symbol, interval)
-                    if not df.empty:
-                        return df
-                    
-            # Fallback para yfinance
-            ticker = yf.Ticker(symbol)
-            df = ticker.history(period=period, interval=interval)
+                df = self.alpha_vantage.get_daily_data(symbol)  # Sempre usar dados diários do Alpha Vantage
+                
+                if not df.empty:
+                    # Filtrar período solicitado
+                    end_date = datetime.now()
+                    if period in self._valid_periods:
+                        if period == "1mo":
+                            start_date = end_date - timedelta(days=30)
+                        elif period == "3mo":
+                            start_date = end_date - timedelta(days=90)
+                        elif period == "6mo":
+                            start_date = end_date - timedelta(days=180)
+                        elif period == "1y":
+                            start_date = end_date - timedelta(days=365)
+                        elif period == "2y":
+                            start_date = end_date - timedelta(days=730)
+                        else:  # 5y
+                            start_date = end_date - timedelta(days=1825)
+                        
+                        df = df[df.index >= start_date]
+                    return df
             
-            if df.empty:
-                raise ValueError(f"Não há dados disponíveis para {symbol}")
+            # Fallback para yfinance
+            if df is None or df.empty:
+                ticker = yf.Ticker(symbol)
+                df = ticker.history(period=period, interval=interval)
+                
+                if df.empty:
+                    raise ValueError(f"Não há dados disponíveis para {symbol}")
             
             return df
             
@@ -99,25 +118,16 @@ class StockDataManager:
         try:
             # Tentar Alpha Vantage primeiro se solicitado e disponível
             if use_alpha_vantage and self.alpha_vantage:
-                # Converter símbolo para formato Alpha Vantage
-                av_symbol = self.alpha_vantage._convert_symbol(symbol)
-                
-                # Buscar dados básicos do ativo
-                params = {
-                    'function': 'GLOBAL_QUOTE',
-                    'symbol': av_symbol,
-                    'apikey': self.alpha_vantage.api_key
-                }
-                
-                data = self.alpha_vantage._make_request(params)
-                if data and 'Global Quote' in data:
-                    quote = data['Global Quote']
+                df = self.alpha_vantage.get_daily_data(symbol)
+                if not df.empty:
+                    last_price = df['Close'].iloc[-1]
+                    last_volume = df['Volume'].iloc[-1]
                     return {
                         'name': symbol,
                         'description': symbol,
                         'currency': 'BRL',
-                        'market_price': float(quote.get('05. price', 0.0)),
-                        'volume': int(quote.get('06. volume', 0)),
+                        'market_price': last_price,
+                        'volume': last_volume,
                         'sector': 'N/A'
                     }
             
