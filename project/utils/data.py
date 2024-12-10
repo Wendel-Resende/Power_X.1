@@ -88,14 +88,40 @@ class StockDataManager:
         except Exception as e:
             raise Exception(f"Erro ao buscar dados para {symbol}: {str(e)}")
     
-    def get_symbol_info(self, symbol: str) -> Dict:
+    def get_symbol_info(self, symbol: str, use_alpha_vantage: bool = False) -> Dict:
         """
         Retorna informações detalhadas sobre um símbolo específico.
         
         Args:
             symbol: Símbolo do ativo
+            use_alpha_vantage: Se True, tenta usar Alpha Vantage primeiro
         """
         try:
+            # Tentar Alpha Vantage primeiro se solicitado e disponível
+            if use_alpha_vantage and self.alpha_vantage:
+                # Converter símbolo para formato Alpha Vantage
+                av_symbol = self.alpha_vantage._convert_symbol(symbol)
+                
+                # Buscar dados básicos do ativo
+                params = {
+                    'function': 'GLOBAL_QUOTE',
+                    'symbol': av_symbol,
+                    'apikey': self.alpha_vantage.api_key
+                }
+                
+                data = self.alpha_vantage._make_request(params)
+                if data and 'Global Quote' in data:
+                    quote = data['Global Quote']
+                    return {
+                        'name': symbol,
+                        'description': symbol,
+                        'currency': 'BRL',
+                        'market_price': float(quote.get('05. price', 0.0)),
+                        'volume': int(quote.get('06. volume', 0)),
+                        'sector': 'N/A'
+                    }
+            
+            # Fallback para yfinance
             ticker = yf.Ticker(symbol)
             info = ticker.info
             
@@ -105,7 +131,8 @@ class StockDataManager:
                 'currency': info.get('currency', 'BRL'),
                 'market_price': info.get('regularMarketPrice', 0.0),
                 'volume': info.get('regularMarketVolume', 0),
-                'sector': info.get('sector', 'N/A')
+                'sector': info.get('sector', 'N/A'),
+                'pe_ratio': info.get('forwardPE', None)
             }
         except Exception:
             return {
