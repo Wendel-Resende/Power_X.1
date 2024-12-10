@@ -31,20 +31,13 @@ def render_sidebar():
         index=3  # 1y por padrão
     )
     
-    interval = st.sidebar.selectbox(
-        "Intervalo",
-        options=list(st.session_state.data_manager.valid_intervals.keys()),
-        format_func=lambda x: st.session_state.data_manager.valid_intervals[x],
-        index=0  # 1d por padrão
-    )
-    
     # Opção para usar Alpha Vantage
     use_alpha_vantage = False
     if hasattr(st.session_state.data_manager, 'alpha_vantage'):
         use_alpha_vantage = st.sidebar.checkbox(
-            "Usar Alpha Vantage para dados intraday",
+            "Usar Alpha Vantage",
             value=False,
-            help="Utiliza a API Alpha Vantage para dados intraday mais precisos"
+            help="Utiliza a API Alpha Vantage para dados diários"
         )
     
     # Configurações de Backtesting
@@ -59,7 +52,7 @@ def render_sidebar():
     
     run_backtest = st.sidebar.button("Executar Backtest")
     
-    return symbol, period, interval, use_alpha_vantage, initial_capital, run_backtest
+    return symbol, period, '1d', use_alpha_vantage, initial_capital, run_backtest
 
 def main():
     st.title("Dashboard Financeiro - Análise Técnica")
