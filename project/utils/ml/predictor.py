@@ -17,17 +17,14 @@ class MLPredictor:
     def prepare_data(self, df):
         """Prepara dados para treinamento."""
         try:
-            # Construir features usando o FeatureBuilder
             features = self.feature_builder.build_features(df)
             self.feature_names = features.columns
             
-            # Target (retorno futuro ajustado por volatilidade)
             returns = df['Close'].pct_change()
             volatility = returns.rolling(20).std()
             target = ((returns.shift(-1) / volatility) > returns.mean()).astype(int)
             target = target[features.index]
             
-            # Remover valores ausentes
             features = features.fillna(method='bfill').fillna(method='ffill')
             target = target.fillna(method='bfill').fillna(0)
             
@@ -44,26 +41,21 @@ class MLPredictor:
             if len(X) < 50:
                 raise ValueError("Dados insuficientes para treinamento")
             
-            # Split temporal com 3 folds
             tscv = TimeSeriesSplit(n_splits=3, test_size=int(len(X)*0.2))
             splits = list(tscv.split(X))
             train_idx, test_idx = splits[-1]
             
-            # Separar dados de treino e teste
             X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
             y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
             
-            # Treinar modelo
             self.model.fit(X_train, y_train, X_test, y_test)
             
-            # Calcular métricas
             train_pred = self.model.predict_proba(X_train)
             test_pred = self.model.predict_proba(X_test)
             
             train_score = ((train_pred > 0.5) == y_train).mean()
             test_score = ((test_pred > 0.5) == y_test).mean()
             
-            # Feature importance
             importance_df = self.model.get_feature_importance(self.feature_names)
             
             return {
@@ -85,38 +77,45 @@ class MLPredictor:
             raise Exception(f"Erro na previsão: {str(e)}")
     
     def get_trading_signals(self, df):
-        """Gera sinais de trading usando três indicadores principais."""
+        """Gera sinais de trading com regras mais flexíveis."""
         try:
-            # Obter probabilidades do modelo
             probabilities = self.predict(df)
-            
-            # Inicializar série de sinais
             signals = pd.Series(index=df.index, data='black')
             
             for i in range(len(df)):
                 if i >= len(probabilities):
                     continue
                 
-                # 1. RSI - Condição de sobrecompra/sobrevenda
-                rsi_ok = (df['RSI'].iloc[i] > 50 and 
-                         df['RSI'].iloc[i] > df['RSI_PREV'].iloc[i])
+                # Indicadores técnicos
+                rsi = df['RSI'].iloc[i]
+                rsi_prev = df['RSI_PREV'].iloc[i]
+                macd = df['MACD'].iloc[i]
+                macd_signal = df['MACD_SIGNAL'].iloc[i]
+                macd_prev = df['MACD_PREV'].iloc[i]
+                stoch_k = df['STOCH_K'].iloc[i]
+                stoch_d = df['STOCH_D'].iloc[i]
+                stoch_k_prev = df['STOCH_K_PREV'].iloc[i]
                 
-                # 2. MACD - Cruzamento e direção
-                macd_ok = (df['MACD'].iloc[i] > df['MACD_SIGNAL'].iloc[i] and 
-                          df['MACD'].iloc[i] > df['MACD_PREV'].iloc[i])
+                # Condições mais flexíveis
+                rsi_ok = (rsi > 40 and rsi_prev < rsi)  # RSI subindo e acima de 40
+                macd_ok = (macd > macd_signal or macd > macd_prev)  # MACD cruzando ou subindo
+                stoch_ok = (stoch_k > stoch_d or stoch_k > stoch_k_prev)  # Stoch cruzando ou subindo
                 
-                # 3. Stochastic - Momentum
-                stoch_ok = (df['STOCH_K'].iloc[i] > df['STOCH_D'].iloc[i] and 
-                           df['STOCH_K'].iloc[i] > df['STOCH_K_PREV'].iloc[i])
+                # Sistema de pontuação
+                score = 0
+                if rsi_ok: score += 1
+                if macd_ok: score += 1
+                if stoch_ok: score += 1
                 
-                # Regras de entrada e saída estritas
-                if probabilities[i] > 0.65:  # Aumentado threshold para maior confiança
-                    # Sinal de compra: TODOS os indicadores devem estar positivos
-                    if rsi_ok and macd_ok and stoch_ok:
+                # Probabilidade do modelo ML
+                ml_prob = probabilities[i]
+                
+                # Regras de sinalização mais flexíveis
+                if ml_prob > 0.55:  # Reduzido threshold
+                    if score >= 2:  # Apenas 2 indicadores precisam confirmar
                         signals.iloc[i] = 'green'
-                elif probabilities[i] < 0.35:  # Diminuído threshold para maior confiança
-                    # Sinal de venda: TODOS os indicadores devem estar negativos
-                    if not rsi_ok and not macd_ok and not stoch_ok:
+                elif ml_prob < 0.45:  # Aumentado threshold
+                    if score <= 1:  # Apenas 1 indicador negativo já sinaliza
                         signals.iloc[i] = 'red'
             
             return signals
