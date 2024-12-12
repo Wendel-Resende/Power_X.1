@@ -3,82 +3,49 @@ Módulo para engenharia de features.
 """
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import RobustScaler
 
 class FeatureEngineering:
-    @staticmethod
-    def create_technical_features(df):
+    def __init__(self):
+        self.scaler = RobustScaler()
+    
+    def create_technical_features(self, df):
         """Cria features baseadas em indicadores técnicos."""
         features = pd.DataFrame(index=df.index)
         
-        # Normalizar indicadores
-        features['STOCH_K'] = df['STOCH_K'] / 100
-        features['STOCH_D'] = df['STOCH_D'] / 100
-        features['RSI'] = df['RSI'] / 100
+        # Usar RobustScaler para lidar com outliers
+        tech_data = df[['STOCH_K', 'STOCH_D', 'RSI', 'MACD', 'MACD_SIGNAL']].copy()
+        scaled_tech = self.scaler.fit_transform(tech_data)
+        tech_data_scaled = pd.DataFrame(
+            scaled_tech, 
+            columns=tech_data.columns,
+            index=tech_data.index
+        )
         
-        # Normalizar MACD
-        macd_range = df['MACD'].max() - df['MACD'].min()
-        if macd_range > 0:
-            features['MACD'] = (df['MACD'] - df['MACD'].min()) / macd_range
-            features['MACD_SIGNAL'] = (df['MACD_SIGNAL'] - df['MACD_SIGNAL'].min()) / macd_range
+        features = pd.concat([features, tech_data_scaled], axis=1)
         
-        # Adicionar diferenças
+        # Adicionar features de momentum
         features['STOCH_DIFF'] = features['STOCH_K'] - features['STOCH_K'].shift(1)
         features['RSI_DIFF'] = features['RSI'] - features['RSI'].shift(1)
         features['MACD_DIFF'] = features['MACD'] - features['MACD_SIGNAL']
         
         return features
     
-    @staticmethod
-    def create_price_features(df):
+    def create_price_features(self, df):
         """Cria features baseadas em preço e volume."""
         features = pd.DataFrame(index=df.index)
         
-        # Normalizar preço
-        close_min = df['Close'].rolling(window=20).min()
-        close_max = df['Close'].rolling(window=20).max()
-        features['Close_Norm'] = (df['Close'] - close_min) / (close_max - close_min)
+        # Calcular retornos em diferentes períodos
+        for period in [1, 3, 5, 10, 20]:
+            features[f'Returns_{period}d'] = df['Close'].pct_change(period)
+            features[f'Volume_{period}d'] = df['Volume'].pct_change(period)
         
-        # Normalizar volume
-        volume_min = df['Volume'].rolling(window=20).min()
-        volume_max = df['Volume'].rolling(window=20).max()
-        features['Volume_Norm'] = (df['Volume'] - volume_min) / (volume_max - volume_min)
+        # Adicionar volatilidade
+        features['Volatility'] = df['Close'].pct_change().rolling(20).std()
         
-        # Retornos
-        features['Returns'] = df['Close'].pct_change()
-        features['Returns_Vol'] = features['Returns'].rolling(window=20).std()
-        
-        return features
-    
-    @staticmethod
-    def create_lagged_features(df, columns, lags=3):
-        """Cria features defasadas."""
-        features = pd.DataFrame(index=df.index)
-        
-        for col in columns:
-            if col in df.columns:
-                # Usar rolling mean para suavizar
-                smoothed = df[col].rolling(window=3).mean()
-                for lag in range(1, lags + 1):
-                    features[f'{col}_lag_{lag}'] = smoothed.shift(lag)
-        
-        return features
-
-    @staticmethod
-    def align_features_target(features, target):
-        """Alinha features e target e remove NaN."""
-        # Encontrar índices comuns
-        common_index = features.index.intersection(target.index)
-        
-        if len(common_index) == 0:
-            raise ValueError("Sem dados suficientes após alinhamento")
-        
-        # Alinhar dados
-        features = features.loc[common_index]
-        target = target.loc[common_index]
-        
-        # Remover NaN
-        valid_idx = ~(features.isna().any(axis=1) | target.isna())
-        features = features[valid_idx]
-        target = target[valid_idx]
-        
-        return features, target
+        # Normalizar features
+        return pd.DataFrame(
+            self.scaler.fit_transform(features),
+            columns=features.columns,
+            index=features.index
+        )
