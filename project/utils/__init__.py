@@ -1,10 +1,20 @@
 """
-Módulo de utilidades para o dashboard financeiro.
+Módulo principal de utilidades.
 """
+from .indicators import (
+    calculate_rsi,
+    calculate_stochastic,
+    calculate_macd,
+    calculate_bollinger_bands,
+    calculate_atr
+)
+from .ml import MLPredictor
 
-from .data import StockDataManager
-from .indicators import calculate_indicators
-from .plotting import create_dashboard_plot
-from .backtest import Strategy
-
-__all__ = ['StockDataManager', 'calculate_indicators', 'create_dashboard_plot', 'Strategy']
+__all__ = [
+    'calculate_rsi',
+    'calculate_stochastic',
+    'calculate_macd',
+    'calculate_bollinger_bands',
+    'calculate_atr',
+    'MLPredictor'
+]
