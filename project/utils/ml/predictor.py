@@ -4,6 +4,7 @@ Módulo principal de predição usando Machine Learning.
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
+from .features.builder import FeatureBuilder
 import pandas as pd
 import numpy as np
 
@@ -18,43 +19,21 @@ class MLPredictor:
             random_state=42
         )
         self.scaler = StandardScaler()
+        self.feature_builder = FeatureBuilder()
         self.feature_names = None
     
     def prepare_data(self, df):
         """Prepara dados para treinamento."""
         try:
-            features = pd.DataFrame(index=df.index)
-            
-            # Features de preço
-            for period in [1, 3, 5, 10, 20]:
-                features[f'Returns_{period}d'] = df['Close'].pct_change(period)
-                features[f'Volume_{period}d'] = df['Volume'].pct_change(period)
-            
-            # Features técnicas
-            features['STOCH_K'] = df['STOCH_K']
-            features['STOCH_D'] = df['STOCH_D']
-            features['RSI'] = df['RSI']
-            features['MACD'] = df['MACD']
-            features['MACD_SIGNAL'] = df['MACD_SIGNAL']
-            
-            # Features de volatilidade
-            features['ATR'] = df['ATR']
-            features['BB_Width'] = (df['BB_UPPER'] - df['BB_LOWER']) / df['BB_MIDDLE']
-            
-            # Features de volume
-            features['OBV'] = df['OBV']
-            features['MFI'] = df['MFI']
-            
-            # Remover valores ausentes
-            features = features.dropna()
+            # Usar o FeatureBuilder para criar features
+            features = self.feature_builder.build_features(df)
+            self.feature_names = features.columns
             
             # Target (retorno futuro ajustado por volatilidade)
             returns = df['Close'].pct_change()
             volatility = returns.rolling(20).std()
             target = ((returns.shift(-1) / volatility) > returns.mean()).astype(int)
             target = target[features.index]
-            
-            self.feature_names = features.columns
             
             return features, target
             
@@ -112,3 +91,50 @@ class MLPredictor:
             return self.model.predict_proba(X_scaled)[:, 1]
         except Exception as e:
             raise Exception(f"Erro na previsão: {str(e)}")
+    
+    def get_trading_signals(self, df):
+        """Gera sinais de trading combinando ML com indicadores técnicos."""
+        try:
+            # Obter probabilidades do modelo
+            probabilities = self.predict(df)
+            
+            # Inicializar série de sinais
+            signals = pd.Series(index=df.index, data='black')
+            
+            # Calcular tendência
+            sma_20 = df['Close'].rolling(20).mean()
+            sma_50 = df['Close'].rolling(50).mean()
+            trend = sma_20 > sma_50
+            
+            # Calcular volatilidade
+            volatility = df['Close'].pct_change().rolling(20).std()
+            vol_percentile = volatility.rolling(100).apply(
+                lambda x: pd.Series(x).rank(pct=True).iloc[-1]
+            )
+            
+            for i in range(len(df)):
+                if i >= len(probabilities):
+                    continue
+                    
+                # Condições técnicas
+                stoch_ok = (df['STOCH_K'].iloc[i] > 50 and 
+                           df['STOCH_K'].iloc[i] > df['STOCH_K_PREV'].iloc[i])
+                rsi_ok = (df['RSI'].iloc[i] > 50 and 
+                         df['RSI'].iloc[i] > df['RSI_PREV'].iloc[i])
+                macd_ok = (df['MACD'].iloc[i] > df['MACD_SIGNAL'].iloc[i] and 
+                          df['MACD'].iloc[i] > df['MACD_PREV'].iloc[i])
+                
+                # Contagem de sinais técnicos positivos
+                tech_signals = sum([stoch_ok, rsi_ok, macd_ok])
+                
+                # Combinar ML com sinais técnicos
+                if (probabilities[i] > 0.7 and tech_signals >= 2 and 
+                    trend.iloc[i] and vol_percentile.iloc[i] < 0.8):
+                    signals.iloc[i] = 'green'
+                elif (probabilities[i] < 0.3 and tech_signals <= 1):
+                    signals.iloc[i] = 'red'
+            
+            return signals
+            
+        except Exception as e:
+            raise Exception(f"Erro ao gerar sinais: {str(e)}")
