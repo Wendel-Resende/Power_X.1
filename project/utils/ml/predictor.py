@@ -2,6 +2,7 @@
 Módulo principal do preditor ML.
 """
 import pandas as pd
+import numpy as np
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
@@ -28,16 +29,25 @@ class MLPredictor:
         features = pd.concat([tech_features, price_features, lagged_features], axis=1)
         features = features.dropna()
         
-        # Preparar target
+        # Preparar target (retorno futuro)
         target = df['Close'].pct_change().shift(-1)
-        target = target[features.index]
+        target = target[features.index]  # Alinhar índices
+        target = target.dropna()
         
-        return features, target.dropna()
+        # Garantir alinhamento final
+        common_index = features.index.intersection(target.index)
+        features = features.loc[common_index]
+        target = target.loc[common_index]
+        
+        return features, target
     
     def train(self, df):
         """Treina o modelo preditivo."""
         # Preparar dados
         X, y = self.prepare_data(df)
+        
+        if len(X) < 50:
+            raise ValueError("Dados insuficientes para treinar o modelo")
         
         # Dividir dados
         X_train, X_test, y_train, y_test = train_test_split(
@@ -84,26 +94,31 @@ class MLPredictor:
         if self.model is None:
             return pd.Series(index=df.index, data='black')
         
-        predictions = self.predict(df)
-        signals = pd.Series(index=df.index, data='black')
-        
-        for i in range(len(df)):
-            if i >= len(df) - 1:
-                continue
+        try:
+            predictions = self.predict(df)
+            signals = pd.Series(index=df.index, data='black')
             
-            # Condições técnicas
-            tech_conditions = [
-                (df['STOCH_K'].iloc[i] > 50) and (df['STOCH_K'].iloc[i] > df['STOCH_K'].iloc[i-1]),
-                (df['RSI'].iloc[i] > 50) and (df['RSI'].iloc[i] > df['RSI'].iloc[i-1]),
-                (df['MACD'].iloc[i] > df['MACD_SIGNAL'].iloc[i]) and (df['MACD'].iloc[i] > df['MACD'].iloc[i-1])
-            ]
+            for i in range(1, len(df)):  # Começar do segundo registro
+                # Condições técnicas
+                tech_conditions = [
+                    (df['STOCH_K'].iloc[i] > 50) and (df['STOCH_K'].iloc[i] > df['STOCH_K'].iloc[i-1]),
+                    (df['RSI'].iloc[i] > 50) and (df['RSI'].iloc[i] > df['RSI'].iloc[i-1]),
+                    (df['MACD'].iloc[i] > df['MACD_SIGNAL'].iloc[i]) and (df['MACD'].iloc[i] > df['MACD'].iloc[i-1])
+                ]
+                
+                conditions_met = sum(tech_conditions)
+                
+                # Verificar se o índice existe nas previsões
+                if i < len(predictions):
+                    ml_signal = predictions.iloc[i] > 0
+                    
+                    if conditions_met >= 2 and ml_signal:
+                        signals.iloc[i] = 'green'
+                    elif conditions_met <= 1 and not ml_signal:
+                        signals.iloc[i] = 'red'
             
-            conditions_met = sum(tech_conditions)
-            ml_signal = predictions.iloc[i] > 0
+            return signals
             
-            if conditions_met >= 2 and ml_signal:
-                signals.iloc[i] = 'green'
-            elif conditions_met <= 1 and not ml_signal:
-                signals.iloc[i] = 'red'
-        
-        return signals
+        except Exception as e:
+            print(f"Erro ao gerar sinais ML: {str(e)}")
+            return pd.Series(index=df.index, data='black')

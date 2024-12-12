@@ -7,6 +7,7 @@ from utils.indicators import calculate_indicators
 from utils.plotting import create_dashboard_plot
 from utils.backtest import Strategy
 from utils.ml import MLPredictor
+from utils.signals import get_signal_color
 from datetime import datetime, timedelta
 import pandas as pd
 
@@ -31,15 +32,16 @@ def render_sidebar():
     
     # Seleção de datas
     st.sidebar.subheader("Período")
+    start_date = st.sidebar.date_input(
+        "Data Inicial",
+        value=datetime.now() - timedelta(days=365),
+        max_value=datetime.now()
+    )
     end_date = st.sidebar.date_input(
         "Data Final",
         value=datetime.now(),
+        min_value=start_date,
         max_value=datetime.now()
-    )
-    start_date = st.sidebar.date_input(
-        "Data Inicial",
-        value=end_date - timedelta(days=365),
-        max_value=end_date
     )
     
     use_alpha_vantage = False
@@ -129,10 +131,10 @@ def main():
                     df['signal_color'] = st.session_state.ml_predictor.get_trading_signals(df)
                 except Exception as e:
                     st.warning(f"Erro ao treinar modelo ML: {str(e)}")
-                    df['signal_color'] = df.apply(lambda row: get_signal_color(row), axis=1)
+                    df['signal_color'] = df.apply(get_signal_color, axis=1)
         else:
             # Usar apenas sinais técnicos
-            df['signal_color'] = df.apply(lambda row: get_signal_color(row), axis=1)
+            df['signal_color'] = df.apply(get_signal_color, axis=1)
         
         # Plotar gráfico
         fig = create_dashboard_plot(df)
