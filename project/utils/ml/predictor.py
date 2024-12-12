@@ -1,48 +1,24 @@
 """
-Módulo principal de predição usando Machine Learning.
+Módulo principal de predição usando XGBoost.
 """
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import TimeSeriesSplit
-from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import numpy as np
+from .models.xgboost_model import XGBoostModel
+from .features.builder import FeatureBuilder
 
 class MLPredictor:
     def __init__(self):
-        """Inicializa o preditor com Random Forest."""
-        self.model = RandomForestClassifier(
-            n_estimators=200,
-            max_depth=10,
-            min_samples_split=10,
-            class_weight='balanced',
-            random_state=42
-        )
-        self.scaler = StandardScaler()
+        """Inicializa o preditor com XGBoost."""
+        self.model = XGBoostModel()
+        self.feature_builder = FeatureBuilder()
         self.feature_names = None
     
     def prepare_data(self, df):
         """Prepara dados para treinamento."""
         try:
-            features = pd.DataFrame(index=df.index)
-            
-            # Features de preço
-            for period in [1, 3, 5, 10, 20]:
-                features[f'Returns_{period}d'] = df['Close'].pct_change(period)
-                features[f'Volume_{period}d'] = df['Volume'].pct_change(period)
-            
-            # Features técnicas
-            features['STOCH_DIFF'] = df['STOCH_K'] - df['STOCH_D']
-            features['RSI_DIFF'] = df['RSI'] - df['RSI_PREV']
-            features['MACD_DIFF'] = df['MACD'] - df['MACD_SIGNAL']
-            
-            # Features de volatilidade
-            features['ATR'] = df['ATR']
-            features['BB_Width'] = (df['BB_UPPER'] - df['BB_LOWER']) / df['BB_MIDDLE']
-            
-            # Features de volume
-            features['OBV'] = df['OBV']
-            features['MFI'] = df['MFI']
-            
+            # Construir features usando o FeatureBuilder
+            features = self.feature_builder.build_features(df)
             self.feature_names = features.columns
             
             # Target (retorno futuro ajustado por volatilidade)
@@ -68,36 +44,33 @@ class MLPredictor:
             if len(X) < 50:
                 raise ValueError("Dados insuficientes para treinamento")
             
-            # Split temporal
+            # Split temporal com 3 folds
             tscv = TimeSeriesSplit(n_splits=3, test_size=int(len(X)*0.2))
             splits = list(tscv.split(X))
             train_idx, test_idx = splits[-1]
             
+            # Separar dados de treino e teste
             X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
             y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
             
-            # Normalizar features
-            X_train_scaled = self.scaler.fit_transform(X_train)
-            X_test_scaled = self.scaler.transform(X_test)
-            
             # Treinar modelo
-            self.model.fit(X_train_scaled, y_train)
+            self.model.fit(X_train, y_train, X_test, y_test)
             
             # Calcular métricas
-            train_score = self.model.score(X_train_scaled, y_train)
-            test_score = self.model.score(X_test_scaled, y_test)
+            train_pred = self.model.predict_proba(X_train)
+            test_pred = self.model.predict_proba(X_test)
+            
+            train_score = ((train_pred > 0.5) == y_train).mean()
+            test_score = ((test_pred > 0.5) == y_test).mean()
             
             # Feature importance
-            importance_df = pd.DataFrame({
-                'feature': self.feature_names,
-                'importance': self.model.feature_importances_
-            }).sort_values('importance', ascending=False)
+            importance_df = self.model.get_feature_importance(self.feature_names)
             
             return {
                 'train_score': train_score,
                 'test_score': test_score,
                 'feature_importance': importance_df,
-                'test_rmse': np.sqrt(((y_test - self.model.predict(X_test_scaled)) ** 2).mean())
+                'test_rmse': np.sqrt(((y_test - (test_pred > 0.5)) ** 2).mean())
             }
             
         except Exception as e:
@@ -107,13 +80,12 @@ class MLPredictor:
         """Faz previsões com o modelo treinado."""
         try:
             X, _ = self.prepare_data(df)
-            X_scaled = self.scaler.transform(X)
-            return self.model.predict_proba(X_scaled)[:, 1]
+            return self.model.predict_proba(X)
         except Exception as e:
             raise Exception(f"Erro na previsão: {str(e)}")
     
     def get_trading_signals(self, df):
-        """Gera sinais de trading combinando ML com indicadores técnicos."""
+        """Gera sinais de trading combinando XGBoost com indicadores técnicos."""
         try:
             # Obter probabilidades do modelo
             probabilities = self.predict(df)
@@ -147,7 +119,7 @@ class MLPredictor:
                 # Contagem de sinais técnicos positivos
                 tech_signals = sum([stoch_ok, rsi_ok, macd_ok])
                 
-                # Combinar ML com sinais técnicos
+                # Combinar XGBoost com sinais técnicos
                 if (probabilities[i] > 0.7 and tech_signals >= 2 and 
                     trend.iloc[i] and vol_percentile.iloc[i] < 0.8):
                     signals.iloc[i] = 'green'
