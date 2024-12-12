@@ -85,7 +85,7 @@ class MLPredictor:
             raise Exception(f"Erro na previsão: {str(e)}")
     
     def get_trading_signals(self, df):
-        """Gera sinais de trading combinando XGBoost com indicadores técnicos."""
+        """Gera sinais de trading usando três indicadores principais."""
         try:
             # Obter probabilidades do modelo
             probabilities = self.predict(df)
@@ -93,38 +93,31 @@ class MLPredictor:
             # Inicializar série de sinais
             signals = pd.Series(index=df.index, data='black')
             
-            # Calcular tendência
-            sma_20 = df['Close'].rolling(20).mean()
-            sma_50 = df['Close'].rolling(50).mean()
-            trend = sma_20 > sma_50
-            
-            # Calcular volatilidade
-            volatility = df['Close'].pct_change().rolling(20).std()
-            vol_percentile = volatility.rolling(100).apply(
-                lambda x: pd.Series(x).rank(pct=True).iloc[-1]
-            )
-            
             for i in range(len(df)):
                 if i >= len(probabilities):
                     continue
-                    
-                # Condições técnicas
-                stoch_ok = (df['STOCH_K'].iloc[i] > 50 and 
-                           df['STOCH_K'].iloc[i] > df['STOCH_K_PREV'].iloc[i])
+                
+                # 1. RSI - Condição de sobrecompra/sobrevenda
                 rsi_ok = (df['RSI'].iloc[i] > 50 and 
                          df['RSI'].iloc[i] > df['RSI_PREV'].iloc[i])
+                
+                # 2. MACD - Cruzamento e direção
                 macd_ok = (df['MACD'].iloc[i] > df['MACD_SIGNAL'].iloc[i] and 
                           df['MACD'].iloc[i] > df['MACD_PREV'].iloc[i])
                 
-                # Contagem de sinais técnicos positivos
-                tech_signals = sum([stoch_ok, rsi_ok, macd_ok])
+                # 3. Stochastic - Momentum
+                stoch_ok = (df['STOCH_K'].iloc[i] > df['STOCH_D'].iloc[i] and 
+                           df['STOCH_K'].iloc[i] > df['STOCH_K_PREV'].iloc[i])
                 
-                # Combinar XGBoost com sinais técnicos
-                if (probabilities[i] > 0.7 and tech_signals >= 2 and 
-                    trend.iloc[i] and vol_percentile.iloc[i] < 0.8):
-                    signals.iloc[i] = 'green'
-                elif (probabilities[i] < 0.3 and tech_signals <= 1):
-                    signals.iloc[i] = 'red'
+                # Regras de entrada e saída estritas
+                if probabilities[i] > 0.65:  # Aumentado threshold para maior confiança
+                    # Sinal de compra: TODOS os indicadores devem estar positivos
+                    if rsi_ok and macd_ok and stoch_ok:
+                        signals.iloc[i] = 'green'
+                elif probabilities[i] < 0.35:  # Diminuído threshold para maior confiança
+                    # Sinal de venda: TODOS os indicadores devem estar negativos
+                    if not rsi_ok and not macd_ok and not stoch_ok:
+                        signals.iloc[i] = 'red'
             
             return signals
             
