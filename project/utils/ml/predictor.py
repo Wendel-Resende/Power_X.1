@@ -1,16 +1,15 @@
 """
 Módulo principal de predição usando Machine Learning.
 """
-from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.preprocessing import StandardScaler
-from .features.builder import FeatureBuilder
 import pandas as pd
 import numpy as np
 
 class MLPredictor:
     def __init__(self):
-        """Inicializa o preditor com modelo ensemble."""
+        """Inicializa o preditor com Random Forest."""
         self.model = RandomForestClassifier(
             n_estimators=200,
             max_depth=10,
@@ -19,14 +18,31 @@ class MLPredictor:
             random_state=42
         )
         self.scaler = StandardScaler()
-        self.feature_builder = FeatureBuilder()
         self.feature_names = None
     
     def prepare_data(self, df):
         """Prepara dados para treinamento."""
         try:
-            # Usar o FeatureBuilder para criar features
-            features = self.feature_builder.build_features(df)
+            features = pd.DataFrame(index=df.index)
+            
+            # Features de preço
+            for period in [1, 3, 5, 10, 20]:
+                features[f'Returns_{period}d'] = df['Close'].pct_change(period)
+                features[f'Volume_{period}d'] = df['Volume'].pct_change(period)
+            
+            # Features técnicas
+            features['STOCH_DIFF'] = df['STOCH_K'] - df['STOCH_D']
+            features['RSI_DIFF'] = df['RSI'] - df['RSI_PREV']
+            features['MACD_DIFF'] = df['MACD'] - df['MACD_SIGNAL']
+            
+            # Features de volatilidade
+            features['ATR'] = df['ATR']
+            features['BB_Width'] = (df['BB_UPPER'] - df['BB_LOWER']) / df['BB_MIDDLE']
+            
+            # Features de volume
+            features['OBV'] = df['OBV']
+            features['MFI'] = df['MFI']
+            
             self.feature_names = features.columns
             
             # Target (retorno futuro ajustado por volatilidade)
@@ -34,6 +50,10 @@ class MLPredictor:
             volatility = returns.rolling(20).std()
             target = ((returns.shift(-1) / volatility) > returns.mean()).astype(int)
             target = target[features.index]
+            
+            # Remover valores ausentes
+            features = features.fillna(method='bfill').fillna(method='ffill')
+            target = target.fillna(method='bfill').fillna(0)
             
             return features, target
             
