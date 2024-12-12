@@ -1,135 +1,119 @@
 """
-Módulo de estratégia de trading usando Machine Learning.
+Módulo de estratégia preditiva usando Machine Learning.
 """
-import numpy as np
 import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
-from tensorflow.keras.optimizers import Adam
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.ensemble import RandomForestRegressor
 
-class MLStrategy:
-    def __init__(self, lookback=60):
-        self.lookback = lookback
+class MLPredictor:
+    def __init__(self):
         self.model = None
-        self.scaler = MinMaxScaler()
+        self.scaler = StandardScaler()
         
-    def prepare_data(self, df):
-        """Prepara dados para o modelo."""
-        # Features técnicas
+    def prepare_features(self, df):
+        """Prepara features para o modelo."""
         features = pd.DataFrame(index=df.index)
         
-        # Preços e volumes normalizados
-        price_cols = ['Open', 'High', 'Low', 'Close']
-        features[price_cols] = self.scaler.fit_transform(df[price_cols])
-        features['Volume'] = self.scaler.fit_transform(df[['Volume']])
-        
-        # Retornos
-        features['Returns'] = df['Close'].pct_change()
-        
-        # Volatilidade
-        features['Volatility'] = df['Close'].rolling(window=20).std()
-        
-        # Momentum
-        features['RSI'] = df['RSI'] / 100  # Normalizar RSI
-        features['STOCH_K'] = df['STOCH_K'] / 100  # Normalizar Stochastic
+        # Features técnicas
+        features['STOCH_K'] = df['STOCH_K'] / 100  # Normalizar
+        features['STOCH_D'] = df['STOCH_D'] / 100
+        features['RSI'] = df['RSI'] / 100
         features['MACD'] = (df['MACD'] - df['MACD'].min()) / (df['MACD'].max() - df['MACD'].min())
+        features['MACD_SIGNAL'] = (df['MACD_SIGNAL'] - df['MACD_SIGNAL'].min()) / (df['MACD_SIGNAL'].max() - df['MACD_SIGNAL'].min())
         
-        # Tendência
-        features['EMA9_Dist'] = (df['Close'] - df['EMA_9']) / df['Close']
-        features['EMA21_Dist'] = (df['Close'] - df['EMA_21']) / df['Close']
+        # Features de preço
+        features['Close_Norm'] = (df['Close'] - df['Close'].min()) / (df['Close'].max() - df['Close'].min())
+        features['Volume_Norm'] = (df['Volume'] - df['Volume'].min()) / (df['Volume'].max() - df['Volume'].min())
         
-        # Preencher valores NaN
-        features = features.fillna(0)
+        # Features defasadas
+        for i in range(1, 4):
+            features[f'Close_{i}'] = features['Close_Norm'].shift(i)
+            features[f'Volume_{i}'] = features['Volume_Norm'].shift(i)
         
-        return features
+        return features.dropna()
     
-    def create_sequences(self, features):
-        """Cria sequências para LSTM."""
-        X, y = [], []
-        
-        for i in range(self.lookback, len(features)):
-            X.append(features.iloc[i-self.lookback:i].values)
-            # Target: 1 se o preço subiu, 0 se caiu
-            y.append(1 if features['Returns'].iloc[i] > 0 else 0)
-            
-        return np.array(X), np.array(y)
+    def prepare_target(self, df):
+        """Prepara o target (retorno futuro)."""
+        return df['Close'].pct_change().shift(-1).dropna()
     
-    def build_model(self, input_shape):
-        """Constrói modelo LSTM."""
-        model = Sequential([
-            LSTM(100, return_sequences=True, input_shape=input_shape),
-            Dropout(0.2),
-            LSTM(50, return_sequences=False),
-            Dropout(0.2),
-            Dense(25, activation='relu'),
-            Dense(1, activation='sigmoid')
-        ])
-        
-        model.compile(
-            optimizer=Adam(learning_rate=0.001),
-            loss='binary_crossentropy',
-            metrics=['accuracy']
-        )
-        
-        return model
-    
-    def train(self, df, validation_split=0.2):
-        """Treina o modelo."""
+    def train(self, df):
+        """Treina o modelo preditivo."""
         # Preparar dados
-        features = self.prepare_data(df)
-        X, y = self.create_sequences(features)
+        X = self.prepare_features(df)
+        y = self.prepare_target(df)
         
-        # Construir e treinar modelo
-        self.model = self.build_model((self.lookback, features.shape[1]))
+        # Alinhar índices
+        common_index = X.index.intersection(y.index)
+        X = X.loc[common_index]
+        y = y.loc[common_index]
         
-        history = self.model.fit(
-            X, y,
-            validation_split=validation_split,
-            epochs=50,
-            batch_size=32,
-            verbose=0
+        # Dividir dados
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=0.2, shuffle=False
         )
         
-        return history
+        # Treinar modelo
+        self.model = RandomForestRegressor(
+            n_estimators=100,
+            max_depth=10,
+            random_state=42
+        )
+        self.model.fit(X_train, y_train)
+        
+        # Calcular métricas
+        train_score = self.model.score(X_train, y_train)
+        test_score = self.model.score(X_test, y_test)
+        
+        return {
+            'train_score': train_score,
+            'test_score': test_score,
+            'feature_importance': pd.DataFrame({
+                'feature': X.columns,
+                'importance': self.model.feature_importances_
+            }).sort_values('importance', ascending=False)
+        }
     
     def predict(self, df):
         """Faz previsões com o modelo treinado."""
         if self.model is None:
             raise ValueError("Modelo não treinado")
-            
-        features = self.prepare_data(df)
-        X, _ = self.create_sequences(features)
         
+        X = self.prepare_features(df)
         predictions = self.model.predict(X)
         
-        # Converter previsões para sinais
-        signals = pd.Series(index=df.index, data=np.nan)
-        signals.iloc[self.lookback:] = (predictions.flatten() > 0.5).astype(int)
-        
-        return signals
+        return pd.Series(predictions, index=X.index)
     
-    def generate_trading_signals(self, df):
+    def get_trading_signals(self, df):
         """Gera sinais de trading combinando ML com análise técnica."""
-        # Previsões do modelo
-        ml_signals = self.predict(df)
+        if self.model is None:
+            return pd.Series(index=df.index, data='black')
         
-        # Sinais técnicos
-        tech_signals = pd.Series(index=df.index, data='black')
+        # Previsões do modelo
+        predictions = self.predict(df)
+        
+        # Combinar com sinais técnicos
+        signals = pd.Series(index=df.index, data='black')
         
         for i in range(len(df)):
+            if i >= len(df) - 1:  # Último dia
+                continue
+                
             # Condições técnicas
-            rsi_ok = df['RSI'].iloc[i] > 50
-            stoch_ok = df['STOCH_K'].iloc[i] > 50
-            macd_ok = df['MACD'].iloc[i] > df['MACD_SIGNAL'].iloc[i]
+            stoch_condition = (df['STOCH_K'].iloc[i] > 50) and (df['STOCH_K'].iloc[i] > df['STOCH_K'].iloc[i-1])
+            rsi_condition = (df['RSI'].iloc[i] > 50) and (df['RSI'].iloc[i] > df['RSI'].iloc[i-1])
+            macd_condition = (df['MACD'].iloc[i] > df['MACD_SIGNAL'].iloc[i]) and (df['MACD'].iloc[i] > df['MACD'].iloc[i-1])
+            
+            # Previsão ML
+            ml_signal = predictions.iloc[i] > 0
             
             # Combinar sinais
-            if i >= self.lookback:
-                ml_signal = ml_signals.iloc[i]
-                
-                if ml_signal == 1 and (rsi_ok and stoch_ok and macd_ok):
-                    tech_signals.iloc[i] = 'green'
-                elif ml_signal == 0 and (not rsi_ok and not stoch_ok and not macd_ok):
-                    tech_signals.iloc[i] = 'red'
+            conditions_met = sum([stoch_condition, rsi_condition, macd_condition])
+            
+            if conditions_met >= 2 and ml_signal:
+                signals.iloc[i] = 'green'
+            elif conditions_met <= 1 and not ml_signal:
+                signals.iloc[i] = 'red'
         
-        return tech_signals
+        return signals
