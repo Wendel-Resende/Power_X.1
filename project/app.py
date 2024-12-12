@@ -3,7 +3,8 @@ Aplicativo principal do dashboard financeiro.
 """
 import streamlit as st
 from utils.data import StockDataManager
-from utils.indicators import calculate_indicators
+from utils.indicators.momentum import calculate_stochastic, calculate_rsi, calculate_macd
+from utils.indicators.volatility import calculate_bollinger_bands, calculate_atr
 from utils.plotting import create_dashboard_plot
 from utils.backtest import Strategy
 from utils.ml import MLPredictor
@@ -20,6 +21,29 @@ def initialize_session_state():
         st.session_state.data_manager = StockDataManager(alpha_vantage_key)
     if 'ml_predictor' not in st.session_state:
         st.session_state.ml_predictor = MLPredictor()
+
+def calculate_indicators(df):
+    """Calcula todos os indicadores técnicos."""
+    if df is None or df.empty:
+        raise ValueError("DataFrame está vazio ou None")
+    
+    try:
+        df = df.copy()
+        
+        # Calcular indicadores
+        df = calculate_stochastic(df)
+        df = calculate_rsi(df)
+        df = calculate_macd(df)
+        df = calculate_bollinger_bands(df)
+        df = calculate_atr(df)
+        
+        # Preencher valores NaN
+        df = df.fillna(method='bfill').fillna(method='ffill')
+        
+        return df
+        
+    except Exception as e:
+        raise Exception(f"Erro ao calcular indicadores: {str(e)}")
 
 def render_sidebar():
     """Renderiza a barra lateral com as configurações."""
