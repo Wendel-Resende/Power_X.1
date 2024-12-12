@@ -29,11 +29,17 @@ def render_sidebar():
         value=st.session_state.data_manager.default_symbol
     )
     
-    period = st.sidebar.selectbox(
-        "Período",
-        options=list(st.session_state.data_manager.valid_periods.keys()),
-        format_func=lambda x: st.session_state.data_manager.valid_periods[x],
-        index=3  # 1y por padrão
+    # Seleção de datas
+    st.sidebar.subheader("Período")
+    end_date = st.sidebar.date_input(
+        "Data Final",
+        value=datetime.now(),
+        max_value=datetime.now()
+    )
+    start_date = st.sidebar.date_input(
+        "Data Inicial",
+        value=end_date - timedelta(days=365),
+        max_value=end_date
     )
     
     use_alpha_vantage = False
@@ -62,19 +68,19 @@ def render_sidebar():
     
     run_backtest = st.sidebar.button("Executar Backtest")
     
-    return symbol, period, '1d', use_alpha_vantage, use_ml, initial_capital, run_backtest
+    return symbol, start_date, end_date, use_alpha_vantage, use_ml, initial_capital, run_backtest
 
 def main():
     st.title("Dashboard Financeiro - Análise Técnica + ML")
     
     initialize_session_state()
     
-    symbol, period, interval, use_alpha_vantage, use_ml, initial_capital, run_backtest = render_sidebar()
+    symbol, start_date, end_date, use_alpha_vantage, use_ml, initial_capital, run_backtest = render_sidebar()
     
     try:
         with st.spinner('Carregando dados do ativo...'):
             df = st.session_state.data_manager.fetch_stock_data(
-                symbol, period, interval, use_alpha_vantage
+                symbol, start_date, end_date, use_alpha_vantage
             )
             
             info = st.session_state.data_manager.get_symbol_info(
@@ -99,27 +105,31 @@ def main():
         df = calculate_indicators(df)
         
         # Machine Learning
-        if use_ml:
+        if use_ml and len(df) > 50:  # Mínimo de dados para ML
             with st.spinner('Treinando modelo...'):
-                metrics = st.session_state.ml_predictor.train(df)
-                
-                # Mostrar métricas do modelo
-                st.subheader("Métricas do Modelo ML")
-                col1, col2, col3 = st.columns(3)
-                with col1:
-                    st.metric("Precisão (Treino)", f"{metrics['train_score']:.2%}")
-                with col2:
-                    st.metric("Precisão (Teste)", f"{metrics['test_score']:.2%}")
-                with col3:
-                    st.metric("RMSE (Teste)", f"{metrics['test_rmse']:.4f}")
-                
-                # Importância das features
-                if 'feature_importance' in metrics:
-                    st.subheader("Importância das Features")
-                    st.dataframe(metrics['feature_importance'])
-                
-                # Gerar sinais combinados
-                df['signal_color'] = st.session_state.ml_predictor.get_trading_signals(df)
+                try:
+                    metrics = st.session_state.ml_predictor.train(df)
+                    
+                    # Mostrar métricas do modelo
+                    st.subheader("Métricas do Modelo ML")
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("Precisão (Treino)", f"{metrics['train_score']:.2%}")
+                    with col2:
+                        st.metric("Precisão (Teste)", f"{metrics['test_score']:.2%}")
+                    with col3:
+                        st.metric("RMSE (Teste)", f"{metrics['test_rmse']:.4f}")
+                    
+                    # Importância das features
+                    if 'feature_importance' in metrics:
+                        st.subheader("Importância das Features")
+                        st.dataframe(metrics['feature_importance'])
+                    
+                    # Gerar sinais combinados
+                    df['signal_color'] = st.session_state.ml_predictor.get_trading_signals(df)
+                except Exception as e:
+                    st.warning(f"Erro ao treinar modelo ML: {str(e)}")
+                    df['signal_color'] = df.apply(lambda row: get_signal_color(row), axis=1)
         else:
             # Usar apenas sinais técnicos
             df['signal_color'] = df.apply(lambda row: get_signal_color(row), axis=1)

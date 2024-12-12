@@ -4,7 +4,7 @@ Módulo de gerenciamento de dados com suporte a múltiplas fontes.
 import yfinance as yf
 import pandas as pd
 from typing import Dict, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, date
 from .alpha_vantage import AlphaVantageClient
 
 class StockDataManager:
@@ -17,18 +17,7 @@ class StockDataManager:
         Args:
             alpha_vantage_key: Chave da API Alpha Vantage (opcional)
         """
-        self._default_symbol = 'BBDC4.SA'
-        self._valid_periods = {
-            "1mo": "1 mês",
-            "3mo": "3 meses", 
-            "6mo": "6 meses",
-            "1y": "1 ano",
-            "2y": "2 anos",
-            "5y": "5 anos"
-        }
-        self._valid_intervals = {
-            "1d": "Diário"  # Mantendo apenas intervalo diário
-        }
+        self._default_symbol = 'PETR4.SA'
         
         # Inicializar cliente Alpha Vantage se a chave estiver disponível
         self.alpha_vantage = None
@@ -43,25 +32,15 @@ class StockDataManager:
         """Retorna o símbolo padrão."""
         return self._default_symbol
     
-    @property
-    def valid_periods(self) -> Dict[str, str]:
-        """Retorna os períodos válidos."""
-        return self._valid_periods
-    
-    @property
-    def valid_intervals(self) -> Dict[str, str]:
-        """Retorna os intervalos válidos."""
-        return self._valid_intervals
-    
-    def fetch_stock_data(self, symbol: str, period: str = '1y', interval: str = '1d', 
+    def fetch_stock_data(self, symbol: str, start_date: date, end_date: date,
                         use_alpha_vantage: bool = False) -> pd.DataFrame:
         """
         Busca dados históricos usando a fonte especificada.
         
         Args:
             symbol: Símbolo do ativo
-            period: Período de dados
-            interval: Intervalo dos dados (sempre '1d')
+            start_date: Data inicial
+            end_date: Data final
             use_alpha_vantage: Se True, usa Alpha Vantage como fonte primária
         """
         try:
@@ -69,41 +48,27 @@ class StockDataManager:
             
             # Usar Alpha Vantage se selecionado e disponível
             if use_alpha_vantage and self.alpha_vantage:
-                print("Buscando dados via Alpha Vantage...")  # Debug
+                print("Buscando dados via Alpha Vantage...")
                 df = self.alpha_vantage.get_daily_data(symbol)
                 
                 if not df.empty:
                     # Filtrar período solicitado
-                    end_date = datetime.now()
-                    if period in self._valid_periods:
-                        if period == "1mo":
-                            start_date = end_date - timedelta(days=30)
-                        elif period == "3mo":
-                            start_date = end_date - timedelta(days=90)
-                        elif period == "6mo":
-                            start_date = end_date - timedelta(days=180)
-                        elif period == "1y":
-                            start_date = end_date - timedelta(days=365)
-                        elif period == "2y":
-                            start_date = end_date - timedelta(days=730)
-                        else:  # 5y
-                            start_date = end_date - timedelta(days=1825)
-                        
-                        df = df[df.index >= start_date]
-                        print(f"Dados Alpha Vantage obtidos: {len(df)} registros")  # Debug
-                        return df
+                    df = df[(df.index >= pd.Timestamp(start_date)) & 
+                           (df.index <= pd.Timestamp(end_date))]
+                    print(f"Dados Alpha Vantage obtidos: {len(df)} registros")
+                    return df
                 else:
-                    print("Nenhum dado encontrado via Alpha Vantage")  # Debug
+                    print("Nenhum dado encontrado via Alpha Vantage")
             
             # Fallback para yfinance
-            print("Buscando dados via Yahoo Finance...")  # Debug
+            print("Buscando dados via Yahoo Finance...")
             ticker = yf.Ticker(symbol)
-            df = ticker.history(period=period, interval='1d')  # Sempre usar intervalo diário
+            df = ticker.history(start=start_date, end=end_date, interval='1d')
             
             if df.empty:
                 raise ValueError(f"Não há dados disponíveis para {symbol}")
             
-            print(f"Dados Yahoo Finance obtidos: {len(df)} registros")  # Debug
+            print(f"Dados Yahoo Finance obtidos: {len(df)} registros")
             return df
             
         except Exception as e:
@@ -119,7 +84,7 @@ class StockDataManager:
         """
         try:
             if use_alpha_vantage and self.alpha_vantage:
-                print("Buscando informações via Alpha Vantage...")  # Debug
+                print("Buscando informações via Alpha Vantage...")
                 df = self.alpha_vantage.get_daily_data(symbol)
                 if not df.empty:
                     last_price = df['Close'].iloc[-1]
@@ -134,7 +99,7 @@ class StockDataManager:
                     }
             
             # Fallback para yfinance
-            print("Buscando informações via Yahoo Finance...")  # Debug
+            print("Buscando informações via Yahoo Finance...")
             ticker = yf.Ticker(symbol)
             info = ticker.info
             
