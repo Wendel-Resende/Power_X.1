@@ -6,7 +6,11 @@ from utils.data import StockDataManager
 from utils.indicators import calculate_indicators
 from utils.plotting import create_dashboard_plot
 from utils.backtest import Strategy
-from utils.ml_strategy import MLPredictor
+from utils.ml import MLPredictor
+from datetime import datetime, timedelta
+import pandas as pd
+
+st.set_page_config(layout="wide", page_title="Dashboard Financeiro")
 
 def initialize_session_state():
     """Inicializa o estado da sessão com valores padrão."""
@@ -21,7 +25,7 @@ def render_sidebar():
     st.sidebar.header("Configurações")
     
     symbol = st.sidebar.text_input(
-        "Símbolo do Ativo (ex: BBDC4.SA)",
+        "Símbolo do Ativo (ex: PETR4.SA)",
         value=st.session_state.data_manager.default_symbol
     )
     
@@ -40,6 +44,13 @@ def render_sidebar():
             help="Utiliza a API Alpha Vantage para dados diários"
         )
     
+    st.sidebar.header("Machine Learning")
+    use_ml = st.sidebar.checkbox(
+        "Usar Previsões ML",
+        value=True,
+        help="Combina análise técnica com previsões de machine learning"
+    )
+    
     st.sidebar.header("Backtesting")
     initial_capital = st.sidebar.number_input(
         "Capital Inicial (R$)",
@@ -49,22 +60,16 @@ def render_sidebar():
         format="%.2f"
     )
     
-    use_ml = st.sidebar.checkbox(
-        "Usar Machine Learning",
-        value=False,
-        help="Combina análise técnica com previsões de ML"
-    )
-    
     run_backtest = st.sidebar.button("Executar Backtest")
     
-    return symbol, period, '1d', use_alpha_vantage, initial_capital, use_ml, run_backtest
+    return symbol, period, '1d', use_alpha_vantage, use_ml, initial_capital, run_backtest
 
 def main():
-    st.title("Dashboard Financeiro - Análise Técnica")
+    st.title("Dashboard Financeiro - Análise Técnica + ML")
     
     initialize_session_state()
     
-    symbol, period, interval, use_alpha_vantage, initial_capital, use_ml, run_backtest = render_sidebar()
+    symbol, period, interval, use_alpha_vantage, use_ml, initial_capital, run_backtest = render_sidebar()
     
     try:
         with st.spinner('Carregando dados do ativo...'):
@@ -80,6 +85,7 @@ def main():
             st.warning("Não há dados disponíveis para o período selecionado.")
             return
         
+        # Métricas do ativo
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric("Preço Atual", f"R$ {info['market_price']:.2f}")
@@ -89,27 +95,40 @@ def main():
             if 'pe_ratio' in info:
                 st.metric("P/L", info['pe_ratio'])
         
+        # Calcular indicadores
         df = calculate_indicators(df)
         
+        # Machine Learning
         if use_ml:
-            with st.spinner('Treinando modelo de ML...'):
+            with st.spinner('Treinando modelo...'):
                 metrics = st.session_state.ml_predictor.train(df)
                 
-                col1, col2 = st.columns(2)
+                # Mostrar métricas do modelo
+                st.subheader("Métricas do Modelo ML")
+                col1, col2, col3 = st.columns(3)
                 with col1:
-                    st.metric("Score Treino", f"{metrics['train_score']:.2%}")
+                    st.metric("Precisão (Treino)", f"{metrics['train_score']:.2%}")
                 with col2:
-                    st.metric("Score Teste", f"{metrics['test_score']:.2%}")
+                    st.metric("Precisão (Teste)", f"{metrics['test_score']:.2%}")
+                with col3:
+                    st.metric("RMSE (Teste)", f"{metrics['test_rmse']:.4f}")
                 
-                st.subheader("Importância das Features")
-                st.dataframe(metrics['feature_importance'])
+                # Importância das features
+                if 'feature_importance' in metrics:
+                    st.subheader("Importância das Features")
+                    st.dataframe(metrics['feature_importance'])
                 
-                # Usar sinais combinados de ML
+                # Gerar sinais combinados
                 df['signal_color'] = st.session_state.ml_predictor.get_trading_signals(df)
+        else:
+            # Usar apenas sinais técnicos
+            df['signal_color'] = df.apply(lambda row: get_signal_color(row), axis=1)
         
+        # Plotar gráfico
         fig = create_dashboard_plot(df)
         st.plotly_chart(fig, use_container_width=True)
         
+        # Backtest
         if run_backtest:
             st.header("Resultados do Backtest")
             

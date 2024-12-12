@@ -1,11 +1,11 @@
 """
-Módulo para cálculo de indicadores técnicos usando pandas_ta.
+Módulo para cálculo de indicadores técnicos.
 """
 import pandas as pd
 import pandas_ta as ta
 
 def calculate_stochastic(df, k=14, d=3, smooth_k=3):
-    """Calculate Stochastic oscillator."""
+    """Calcula o oscilador Stochastic."""
     try:
         if df is None or df.empty:
             raise ValueError("DataFrame vazio")
@@ -20,7 +20,7 @@ def calculate_stochastic(df, k=14, d=3, smooth_k=3):
         raise Exception(f"Erro ao calcular Stochastic: {str(e)}")
 
 def calculate_rsi(df, length=7):
-    """Calculate RSI indicator."""
+    """Calcula o indicador RSI."""
     try:
         if df is None or df.empty:
             raise ValueError("DataFrame vazio")
@@ -32,7 +32,7 @@ def calculate_rsi(df, length=7):
         raise Exception(f"Erro ao calcular RSI: {str(e)}")
 
 def calculate_macd(df, fast=12, slow=26, signal=9):
-    """Calculate MACD indicator."""
+    """Calcula o indicador MACD."""
     try:
         if df is None or df.empty:
             raise ValueError("DataFrame vazio")
@@ -47,7 +47,7 @@ def calculate_macd(df, fast=12, slow=26, signal=9):
         raise Exception(f"Erro ao calcular MACD: {str(e)}")
 
 def calculate_indicators(df):
-    """Calculate all technical indicators."""
+    """Calcula todos os indicadores técnicos."""
     if df is None or df.empty:
         raise ValueError("DataFrame está vazio ou None")
     
@@ -59,9 +59,6 @@ def calculate_indicators(df):
         df = calculate_rsi(df)
         df = calculate_macd(df)
         
-        # Calcular sinais
-        df['signal_color'] = df.apply(get_signal_color, axis=1)
-        
         # Preencher valores NaN
         df = df.fillna(method='bfill').fillna(method='ffill')
         
@@ -70,7 +67,7 @@ def calculate_indicators(df):
         raise Exception(f"Erro ao calcular indicadores: {str(e)}")
 
 def get_signal_color(row):
-    """Determine candle color based on indicator conditions."""
+    """Determina a cor do sinal baseado nas condições dos indicadores."""
     try:
         # Stochastic condition
         stoch_condition = (row['STOCH_K'] > 50) and (row['STOCH_K'] > row['STOCH_K_PREV'])
