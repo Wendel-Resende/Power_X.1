@@ -3,7 +3,7 @@ Módulo principal do preditor ML.
 """
 import pandas as pd
 import numpy as np
-from sklearn.ensemble import RandomForestRegressor
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import TimeSeriesSplit
 from .features import FeatureEngineering
@@ -17,15 +17,7 @@ class MLPredictor:
         self.evaluation = ModelEvaluation()
     
     def prepare_data(self, df):
-        """
-        Prepara os dados para treinamento.
-        
-        Args:
-            df: DataFrame com dados históricos e indicadores
-            
-        Returns:
-            tuple: (X, y) com features e target
-        """
+        """Prepara os dados para treinamento."""
         try:
             # Criar features técnicas
             tech_features = self.feature_engineering.create_technical_features(df)
@@ -33,11 +25,12 @@ class MLPredictor:
             # Criar features de preço
             price_features = self.feature_engineering.create_price_features(df)
             
-            # Combinar todas as features
+            # Combinar features
             X = pd.concat([tech_features, price_features], axis=1)
             
-            # Target: retorno futuro
-            y = df['Close'].pct_change().shift(-1)
+            # Target: direção do movimento (classificação binária)
+            returns = df['Close'].pct_change()
+            y = (returns.shift(-1) > 0).astype(int)  # 1 se subiu, 0 se caiu
             
             # Remover dados incompletos
             valid_idx = ~(X.isna().any(axis=1) | y.isna())
@@ -50,15 +43,7 @@ class MLPredictor:
             raise Exception(f"Erro ao preparar dados: {str(e)}")
     
     def train(self, df):
-        """
-        Treina o modelo preditivo.
-        
-        Args:
-            df: DataFrame com dados históricos e indicadores
-            
-        Returns:
-            dict: Métricas de avaliação do modelo
-        """
+        """Treina o modelo preditivo."""
         try:
             # Preparar dados
             X, y = self.prepare_data(df)
@@ -66,44 +51,33 @@ class MLPredictor:
             if len(X) < 50:
                 raise ValueError("Dados insuficientes para treinar o modelo")
             
-            # Ajustar número de splits baseado no tamanho dos dados
-            n_splits = min(5, len(X) // 50)  # 1 split para cada 50 amostras, máximo 5
-            test_size = min(int(len(X) * 0.2), 50)  # Máximo 50 amostras para teste
+            # Usar janela móvel para treinamento (últimos 6 meses)
+            window_size = min(126, len(X) // 2)  # ~6 meses de trading ou metade dos dados
+            X = X.iloc[-window_size:]
+            y = y.iloc[-window_size:]
             
-            # Usar validação cruzada temporal com parâmetros ajustados
-            tscv = TimeSeriesSplit(n_splits=n_splits, test_size=test_size)
+            # Dividir em treino/teste (80/20)
+            train_size = int(len(X) * 0.8)
+            X_train, X_test = X.iloc[:train_size], X.iloc[train_size:]
+            y_train, y_test = y.iloc[:train_size], y.iloc[train_size:]
             
-            best_model = None
-            best_score = float('-inf')
+            # Escalar features
+            X_train_scaled = self.scaler.fit_transform(X_train)
+            X_test_scaled = self.scaler.transform(X_test)
             
-            # Treinar e validar modelo
-            for train_idx, test_idx in tscv.split(X):
-                X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
-                y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
-                
-                # Escalar features
-                X_train_scaled = self.scaler.fit_transform(X_train)
-                X_test_scaled = self.scaler.transform(X_test)
-                
-                # Treinar modelo
-                model = RandomForestRegressor(
-                    n_estimators=100,  # Reduzido para melhor performance
-                    max_depth=6,       # Reduzido para evitar overfitting
-                    min_samples_split=5,
-                    min_samples_leaf=2,
-                    random_state=42
-                )
-                model.fit(X_train_scaled, y_train)
-                
-                # Avaliar modelo
-                score = model.score(X_test_scaled, y_test)
-                if score > best_score:
-                    best_score = score
-                    best_model = model
+            # Treinar modelo de classificação
+            self.model = RandomForestClassifier(
+                n_estimators=100,
+                max_depth=4,  # Reduzido para evitar overfitting
+                min_samples_split=10,
+                min_samples_leaf=5,
+                class_weight='balanced',  # Lidar com desbalanceamento
+                random_state=42
+            )
             
-            self.model = best_model
+            self.model.fit(X_train_scaled, y_train)
             
-            # Avaliar modelo final
+            # Avaliar modelo
             metrics = self.evaluation.evaluate_model(
                 self.model,
                 X_train_scaled, y_train,
@@ -117,15 +91,7 @@ class MLPredictor:
             raise Exception(f"Erro no treinamento: {str(e)}")
     
     def get_trading_signals(self, df):
-        """
-        Gera sinais de trading combinando análise técnica e ML.
-        
-        Args:
-            df: DataFrame com dados e indicadores
-            
-        Returns:
-            pd.Series: Sinais de trading ('green', 'red', 'black')
-        """
+        """Gera sinais de trading."""
         try:
             if self.model is None:
                 raise ValueError("Modelo não treinado")
@@ -135,9 +101,9 @@ class MLPredictor:
             
             # Fazer previsões
             X_scaled = self.scaler.transform(X)
-            predictions = self.model.predict(X_scaled)
+            predictions = self.model.predict_proba(X_scaled)[:, 1]  # Probabilidade de subida
             
-            # Criar sinais baseados nas previsões e indicadores técnicos
+            # Criar sinais
             signals = pd.Series(index=df.index, data='black')
             
             for i in range(len(df)):
@@ -150,9 +116,11 @@ class MLPredictor:
                 macd_ok = (df['MACD'].iloc[i] > df['MACD_SIGNAL'].iloc[i]) and (df['MACD'].iloc[i] > df['MACD_PREV'].iloc[i])
                 
                 # Combinar sinais técnicos com previsão ML
-                if predictions[i] > 0 and all([stoch_ok, rsi_ok, macd_ok]):
+                ml_confidence = predictions[i]
+                
+                if ml_confidence > 0.6 and all([stoch_ok, rsi_ok, macd_ok]):
                     signals.iloc[i] = 'green'
-                elif predictions[i] < 0 and not any([stoch_ok, rsi_ok, macd_ok]):
+                elif ml_confidence < 0.4 and not any([stoch_ok, rsi_ok, macd_ok]):
                     signals.iloc[i] = 'red'
             
             return signals
