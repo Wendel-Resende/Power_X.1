@@ -66,12 +66,17 @@ class MLPredictor:
             if len(X) < 50:
                 raise ValueError("Dados insuficientes para treinar o modelo")
             
-            # Usar validação cruzada temporal
-            tscv = TimeSeriesSplit(n_splits=5, test_size=int(len(X) * 0.2))
+            # Ajustar número de splits baseado no tamanho dos dados
+            n_splits = min(5, len(X) // 50)  # 1 split para cada 50 amostras, máximo 5
+            test_size = min(int(len(X) * 0.2), 50)  # Máximo 50 amostras para teste
+            
+            # Usar validação cruzada temporal com parâmetros ajustados
+            tscv = TimeSeriesSplit(n_splits=n_splits, test_size=test_size)
             
             best_model = None
             best_score = float('-inf')
             
+            # Treinar e validar modelo
             for train_idx, test_idx in tscv.split(X):
                 X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
                 y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
@@ -82,8 +87,8 @@ class MLPredictor:
                 
                 # Treinar modelo
                 model = RandomForestRegressor(
-                    n_estimators=200,
-                    max_depth=8,
+                    n_estimators=100,  # Reduzido para melhor performance
+                    max_depth=6,       # Reduzido para evitar overfitting
                     min_samples_split=5,
                     min_samples_leaf=2,
                     random_state=42
