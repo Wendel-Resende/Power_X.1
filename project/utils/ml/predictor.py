@@ -1,32 +1,32 @@
 """
-Módulo principal de predição usando XGBoost.
+Módulo principal de predição usando LightGBM.
 """
 from sklearn.model_selection import TimeSeriesSplit
 import pandas as pd
 import numpy as np
-from .models.xgboost_model import XGBoostModel
-from .features.builder import FeatureBuilder
+from .models.lightgbm_model import LightGBMModel
+from .feature_processor import FeatureProcessor
+from .signal_generator import SignalGenerator
 
 class MLPredictor:
     def __init__(self):
-        """Inicializa o preditor com XGBoost."""
-        self.model = XGBoostModel()
-        self.feature_builder = FeatureBuilder()
+        """Inicializa o preditor com LightGBM."""
+        self.model = LightGBMModel()
+        self.feature_processor = FeatureProcessor()
+        self.signal_generator = SignalGenerator()
         self.feature_names = None
     
     def prepare_data(self, df):
         """Prepara dados para treinamento."""
         try:
-            features = self.feature_builder.build_features(df)
+            features = self.feature_processor.process_features(df)
             self.feature_names = features.columns
             
+            # Target mais suave usando retornos normalizados
             returns = df['Close'].pct_change()
             volatility = returns.rolling(20).std()
             target = ((returns.shift(-1) / volatility) > returns.mean()).astype(int)
             target = target[features.index]
-            
-            features = features.fillna(method='bfill').fillna(method='ffill')
-            target = target.fillna(method='bfill').fillna(0)
             
             return features, target
             
@@ -41,6 +41,7 @@ class MLPredictor:
             if len(X) < 50:
                 raise ValueError("Dados insuficientes para treinamento")
             
+            # Validação temporal
             tscv = TimeSeriesSplit(n_splits=3, test_size=int(len(X)*0.2))
             splits = list(tscv.split(X))
             train_idx, test_idx = splits[-1]
@@ -68,55 +69,34 @@ class MLPredictor:
         except Exception as e:
             raise Exception(f"Erro no treinamento: {str(e)}")
     
-    def predict(self, df):
-        """Faz previsões com o modelo treinado."""
-        try:
-            X, _ = self.prepare_data(df)
-            return self.model.predict_proba(X)
-        except Exception as e:
-            raise Exception(f"Erro na previsão: {str(e)}")
-    
     def get_trading_signals(self, df):
-        """Gera sinais de trading com regras mais flexíveis."""
+        """Gera sinais de trading."""
         try:
-            probabilities = self.predict(df)
+            probabilities = self.model.predict_proba(
+                self.feature_processor.process_features(df)
+            )
+            
             signals = pd.Series(index=df.index, data='black')
             
             for i in range(len(df)):
                 if i >= len(probabilities):
                     continue
                 
-                # Indicadores técnicos
-                rsi = df['RSI'].iloc[i]
-                rsi_prev = df['RSI_PREV'].iloc[i]
-                macd = df['MACD'].iloc[i]
-                macd_signal = df['MACD_SIGNAL'].iloc[i]
-                macd_prev = df['MACD_PREV'].iloc[i]
-                stoch_k = df['STOCH_K'].iloc[i]
-                stoch_d = df['STOCH_D'].iloc[i]
-                stoch_k_prev = df['STOCH_K_PREV'].iloc[i]
+                indicators = {
+                    'rsi': df['RSI'].iloc[i],
+                    'rsi_prev': df['RSI_PREV'].iloc[i],
+                    'macd': df['MACD'].iloc[i],
+                    'macd_signal': df['MACD_SIGNAL'].iloc[i],
+                    'macd_prev': df['MACD_PREV'].iloc[i],
+                    'stoch_k': df['STOCH_K'].iloc[i],
+                    'stoch_d': df['STOCH_D'].iloc[i],
+                    'stoch_k_prev': df['STOCH_K_PREV'].iloc[i]
+                }
                 
-                # Condições mais flexíveis
-                rsi_ok = (rsi > 40 and rsi_prev < rsi)  # RSI subindo e acima de 40
-                macd_ok = (macd > macd_signal or macd > macd_prev)  # MACD cruzando ou subindo
-                stoch_ok = (stoch_k > stoch_d or stoch_k > stoch_k_prev)  # Stoch cruzando ou subindo
-                
-                # Sistema de pontuação
-                score = 0
-                if rsi_ok: score += 1
-                if macd_ok: score += 1
-                if stoch_ok: score += 1
-                
-                # Probabilidade do modelo ML
-                ml_prob = probabilities[i]
-                
-                # Regras de sinalização mais flexíveis
-                if ml_prob > 0.55:  # Reduzido threshold
-                    if score >= 2:  # Apenas 2 indicadores precisam confirmar
-                        signals.iloc[i] = 'green'
-                elif ml_prob < 0.45:  # Aumentado threshold
-                    if score <= 1:  # Apenas 1 indicador negativo já sinaliza
-                        signals.iloc[i] = 'red'
+                signals.iloc[i] = self.signal_generator.generate_signal(
+                    indicators,
+                    probabilities[i]
+                )
             
             return signals
             
