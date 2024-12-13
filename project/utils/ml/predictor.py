@@ -1,17 +1,17 @@
 """
-Módulo principal de predição usando LightGBM.
+Módulo principal de predição usando XGBoost.
 """
 from sklearn.model_selection import TimeSeriesSplit
 import pandas as pd
 import numpy as np
-from .models.lightgbm_model import LightGBMModel
+from .models.xgboost_model import XGBoostModel
 from .feature_processor import FeatureProcessor
 from .signal_generator import SignalGenerator
 
 class MLPredictor:
     def __init__(self):
-        """Inicializa o preditor com LightGBM."""
-        self.model = LightGBMModel()
+        """Inicializa o preditor com XGBoost."""
+        self.model = XGBoostModel()
         self.feature_processor = FeatureProcessor()
         self.signal_generator = SignalGenerator()
         self.feature_names = None
